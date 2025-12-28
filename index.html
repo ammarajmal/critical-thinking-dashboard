@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Critical Thinking Evaluation Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Merriweather', 'serif'],
+                    },
+                    colors: {
+                        brand: {
+                            blue: '#3b82f6',
+                            green: '#22c55e',
+                            amber: '#f59e0b',
+                            purple: '#a855f7',
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out forwards',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700&display=swap"
+        rel="stylesheet">
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- SheetJS (xlsx) for Excel Export/Import -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .font-serif {
+            font-family: 'Merriweather', serif;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 h-screen w-screen overflow-hidden flex flex-col">
+    <div id="root" class="h-full w-full flex flex-col"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect, useRef } = React;
+
+        // ----------------------------------------------------
+        // ICONS
+        // ----------------------------------------------------
+        const Icon = ({ path, size = 20, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{path}</svg>
+        );
+
+        const Icons = {
+            Users: (props) => <Icon {...props} path={<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>} />,
+            Brain: (props) => <Icon {...props} path={<><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" /><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" /></>} />,
+            GraduationCap: (props) => <Icon {...props} path={<><path d="M22 10v6M2 10l10-5 10 5-10 5z" /><path d="M6 12v5c3 3 9 3 12 0v-5" /></>} />,
+            ChevronRight: (props) => <Icon {...props} path={<path d="m9 18 6-6-6-6" />} />,
+            BarChart2: (props) => <Icon {...props} path={<><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></>} />,
+            Plus: (props) => <Icon {...props} path={<><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>} />,
+            PenTool: (props) => <Icon {...props} path={<><path d="m12 19 7-7 3 3-7 7-3-3z" /><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="m2 2 7.5 7.5" /><path d="m2 2 7.5 7.5" /></>} />,
+            Layout: (props) => <Icon {...props} path={<><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></>} />,
+            CheckCircle: (props) => <Icon {...props} path={<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></>} />,
+            Settings: (props) => <Icon {...props} path={<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></>} />,
+            Trash: (props) => <Icon {...props} path={<><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></>} />,
+            Edit: (props) => <Icon {...props} path={<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></>} />,
+            Save: (props) => <Icon {...props} path={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></>} />,
+            Download: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>} />,
+            Upload: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></>} />,
+        };
+
+        const initialStudentData = [
+            { id: 1, name: "Ammar Ajmal", topic: "Guardians of the Status Quo", peel: { point: "The religious establishment in Pakistan systematically unites against any reformer who attempts to present Islam as a 'Deen' (system) rather than a 'Mazhab' (ritual).", evidence: "Historical fatwas against Maududi, marginalization of Dr. Israr Ahmed, and recent coordinated attacks on Sahil Adeem.", explanation: "This is a defense mechanism (Wahan). By reducing Islam to private worship, the clergy protects their monopoly and relationship with the political elite, similar to the Medieval Church.", link: "Therefore, the primary obstacle to a just system is the religious establishment's active suppression of political Islam." }, evaluations: [{ evaluatorId: 2, evaluatorName: "Ramish Dars", peel: { point: 22, evidence: 20, explanation: 22, link: 20 }, comments: { point: "Strong opening.", evidence: "Good historical context.", explanation: "Logical.", link: "Clear conclusion." }, secondary: { logic: 9, clarity: 9, fairness: 8 } }, { evaluatorId: 4, evaluatorName: "Shoaib Najeeb", peel: { point: 24, evidence: 23, explanation: 23, link: 22 }, comments: { point: "Excellent.", evidence: "Very relevant.", explanation: "Deep insight.", link: "Well connected." }, secondary: { logic: 10, clarity: 9, fairness: 9 } }] },
+            { id: 2, name: "Ramish Dars", topic: "Modesty in Nikkah vs. Israaf", peel: { point: "Celebrating Nikkah modestly aligns with Islamic values and reduces financial stress, allowing focus on the spiritual essence of marriage.", evidence: "Quran (7:31, 17:26) forbids Israaf. Gallup 2025 survey shows 25% of families take loans (avg 1.4M PKR) for weddings.", explanation: "Extravagance is equated with satanic actions (waste). Social pressure forces debt, whereas modesty upholds justice and prevents financial burden.", link: "Therefore, modest Nikkah builds stronger, debt-free marriages and a balanced society." }, evaluations: [{ evaluatorId: 1, evaluatorName: "Ammar Ajmal", peel: { point: 23, evidence: 25, explanation: 22, link: 22 }, comments: {}, secondary: { logic: 9, clarity: 9, fairness: 9 } }, { evaluatorId: 3, evaluatorName: "Vaneeza Tariq", peel: { point: 20, evidence: 22, explanation: 22, link: 25 }, comments: {}, secondary: { logic: 8, clarity: 9, fairness: 10 } }] },
+        ];
+
+        // ----------------------------------------------------
+        // LOGIC 
+        // ----------------------------------------------------
+        const calculateStats = (evaluations) => {
+            if (!evaluations || evaluations.length === 0) return {
+                totalAverage: "0.0",
+                peel: { point: 0, evidence: 0, explanation: 0, link: 0 },
+                secondary: { logic: 0, clarity: 0, fairness: 0 }
+            };
+
+            const peel = { point: 0, evidence: 0, explanation: 0, link: 0 };
+            const secondary = { logic: 0, clarity: 0, fairness: 0 };
+            let totalSum = 0;
+
+            evaluations.forEach(ev => {
+                peel.point += ev.peel.point;
+                peel.evidence += ev.peel.evidence;
+                peel.explanation += ev.peel.explanation;
+                peel.link += ev.peel.link;
+                secondary.logic += ev.secondary.logic;
+                secondary.clarity += ev.secondary.clarity;
+                secondary.fairness += ev.secondary.fairness;
+                totalSum += (ev.peel.point + ev.peel.evidence + ev.peel.explanation + ev.peel.link);
+            });
+
+            const count = evaluations.length;
+            return {
+                totalAverage: (totalSum / count).toFixed(1),
+                peel: {
+                    point: (peel.point / count).toFixed(1),
+                    evidence: (peel.evidence / count).toFixed(1),
+                    explanation: (peel.explanation / count).toFixed(1),
+                    link: (peel.link / count).toFixed(1),
+                },
+                secondary: {
+                    logic: (secondary.logic / count).toFixed(1),
+                    clarity: (secondary.clarity / count).toFixed(1),
+                    fairness: (secondary.fairness / count).toFixed(1),
+                }
+            };
+        };
+
+        const getProgressColor = (score) => {
+            if (score >= 22) return 'bg-green-500';
+            if (score >= 18) return 'bg-blue-500';
+            return 'bg-amber-500';
+        }
+
+        // ----------------------------------------------------
+        // COMPONENTS
+        // ----------------------------------------------------
+
+        const Sidebar = ({ students, selectedId, onSelect, currentView, onViewChange }) => {
+            return (
+                <div className="w-full md:w-72 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col h-full z-20 shadow-lg md:shadow-none font-sans">
+                    <div className="p-6 border-b border-gray-100 bg-gradient-to-br from-slate-50 to-white">
+                        <div className="flex items-center gap-3 mb-1">
+                            <div className="p-2 bg-slate-900 rounded-lg text-white shadow-lg">
+                                <Icons.GraduationCap size={20} />
+                            </div>
+                            <h1 className="font-bold text-slate-800 tracking-tight text-lg">Evaluator</h1>
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium ml-1">Critical Thinking Module</p>
+                    </div>
+
+                    <div className="flex p-2 bg-gray-50 border-b border-gray-100 gap-1">
+                        <button onClick={() => onViewChange('dashboard')} className={`flex-1 flex items-center justify-center p-2 rounded-lg text-xs font-semibold transition-all ${currentView === 'dashboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                            <Icons.Layout size={14} className="mr-1.5" /> View
+                        </button>
+                        <button onClick={() => onViewChange('add')} className={`flex-1 flex items-center justify-center p-2 rounded-lg text-xs font-semibold transition-all ${currentView === 'add' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                            <Icons.PenTool size={14} className="mr-1.5" /> Draft
+                        </button>
+                        <button onClick={() => onViewChange('evaluate')} className={`flex-1 flex items-center justify-center p-2 rounded-lg text-xs font-semibold transition-all ${currentView === 'evaluate' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                            <Icons.CheckCircle size={14} className="mr-1.5" /> Rate
+                        </button>
+                        <button onClick={() => onViewChange('admin')} className={`w-10 flex items-center justify-center p-2 rounded-lg text-xs font-semibold transition-all ${currentView === 'admin' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-900'}`}>
+                            <Icons.Settings size={14} />
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
+                        <h3 className="px-2 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Students</h3>
+                        {students.map(student => {
+                            const stats = calculateStats(student.evaluations);
+                            const isSelected = selectedId === student.id && currentView !== 'add';
+
+                            return (
+                                <button
+                                    key={student.id}
+                                    onClick={() => { onSelect(student.id); if (currentView === 'add' || currentView === 'admin') onViewChange('dashboard'); }}
+                                    className={`w-full text-left p-2.5 rounded-lg transition-all duration-200 group relative border
+                                        ${isSelected ? 'bg-slate-900 text-white shadow-md border-slate-900 z-10' : 'bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border-transparent hover:border-slate-200'}`}
+                                >
+                                    <div className="flex justify-between items-center mb-0.5">
+                                        <span className={`font-semibold text-sm truncate pr-2 ${isSelected ? 'text-white' : 'text-slate-900'}`}>{student.name}</span>
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[28px] text-center ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200'}`}>
+                                            {Number(stats.totalAverage).toFixed(0)}
+                                        </span>
+                                    </div>
+                                    <p className={`text-[11px] truncate transition-colors ${isSelected ? 'text-slate-400' : 'text-slate-400 group-hover:text-slate-500'}`}>{student.topic}</p>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        const PeelCard = ({ title, content, variant }) => {
+            const styles = {
+                Point: { border: 'border-blue-200', bg: 'bg-blue-50/50', title: 'text-blue-800', dot: 'bg-blue-500' },
+                Evidence: { border: 'border-green-200', bg: 'bg-green-50/50', title: 'text-green-800', dot: 'bg-green-500' },
+                Explanation: { border: 'border-amber-200', bg: 'bg-amber-50/50', title: 'text-amber-800', dot: 'bg-amber-500' },
+                Link: { border: 'border-purple-200', bg: 'bg-purple-50/50', title: 'text-purple-800', dot: 'bg-purple-500' }
+            };
+            const s = styles[variant] || styles.Point;
+
+            return (
+                <div className={`p-5 rounded-xl border ${s.border} ${s.bg} hover:shadow-md transition-all duration-300 relative overflow-hidden group h-full`}>
+                    <div className="flex items-center gap-2 mb-3 relative z-10">
+                        <div className={`w-2 h-2 rounded-full ${s.dot} ring-4 ring-white/50`}></div>
+                        <h3 className={`text-xs font-bold uppercase tracking-wider ${s.title}`}>{variant}</h3>
+                    </div>
+                    <p className="font-serif text-slate-700 leading-relaxed text-[15px] relative z-10 whitespace-pre-wrap">{content}</p>
+                </div>
+            );
+        };
+
+        const ProgressBar = ({ label, value, colorClass }) => (
+            <div className="mb-4">
+                <div className="flex justify-between items-end mb-1">
+                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</span>
+                    <span className="text-sm font-bold text-slate-700">{value} <span className="text-slate-400 text-xs font-normal">/ 25</span></span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-1000 ease-out ${colorClass}`} style={{ width: `${(value / 25) * 100}%` }}></div>
+                </div>
+            </div>
+        );
+
+        const EvaluationDashboard = ({ student }) => {
+            const [showSecondary, setShowSecondary] = useState(false);
+            const stats = useMemo(() => calculateStats(student.evaluations), [student]);
+
+            return (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-xl shadow-slate-200/50 p-6 sticky top-6 animate-fade-in w-full">
+                    {/* Header Score */}
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2 text-slate-800">
+                            <Icons.BarChart2 size={20} className="text-slate-400" />
+                            <h2 className="font-bold text-lg">Results</h2>
+                        </div>
+                        <label className="flex items-center cursor-pointer gap-2 select-none group">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-blue-500 transition-colors">
+                                {showSecondary ? 'Hide Secon' : 'Show Secon'}
+                            </span>
+                            <div className="relative">
+                                <input type="checkbox" className="sr-only" checked={showSecondary} onChange={() => setShowSecondary(!showSecondary)} />
+                                <div className={`block w-8 h-5 rounded-full transition-colors ${showSecondary ? 'bg-blue-500' : 'bg-slate-200'}`}></div>
+                                <div className={`absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform ${showSecondary ? 'translate-x-3' : 'translate-x-0'}`}></div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div className="flex items-center justify-center py-6 mb-8">
+                        <div className="relative w-40 h-40 flex items-center justify-center rounded-full border-[8px] border-slate-50 shadow-inner bg-white">
+                            <div className="text-center z-10">
+                                <span className="block text-5xl font-bold text-slate-900 tracking-tighter">{stats.totalAverage}</span>
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">/ 100</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Progress Bars */}
+                    <div className="space-y-6 mb-8">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 border-b border-slate-100 pb-2">PEEL Metrics (0-25)</h3>
+                        <ProgressBar label="Point" value={stats.peel.point} colorClass={getProgressColor(stats.peel.point)} />
+                        <ProgressBar label="Evidence" value={stats.peel.evidence} colorClass={getProgressColor(stats.peel.evidence)} />
+                        <ProgressBar label="Explanation" value={stats.peel.explanation} colorClass={getProgressColor(stats.peel.explanation)} />
+                        <ProgressBar label="Link" value={stats.peel.link} colorClass={getProgressColor(stats.peel.link)} />
+                    </div>
+
+                    {/* Sleek Table for Evaluators */}
+                    <div className="pt-4 border-t border-slate-100 mb-8">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Evaluator Breakdown</h3>
+                        {student.evaluations.length === 0 ? (
+                            <p className="text-sm text-slate-400 italic">No evaluations yet.</p>
+                        ) : (
+                            <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                <table className="w-full text-xs text-left">
+                                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                                        <tr>
+                                            <th className="px-2 py-2">Evaluator</th>
+                                            <th className="px-2 py-2 text-center text-blue-600">Pt</th>
+                                            <th className="px-2 py-2 text-center text-green-600">Ev</th>
+                                            <th className="px-2 py-2 text-center text-amber-600">Ex</th>
+                                            <th className="px-2 py-2 text-center text-purple-600">Lk</th>
+                                            <th className="px-2 py-2 text-right">Tot</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 bg-white">
+                                        {student.evaluations.map((ev, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
+                                                <td className="px-2 py-2 font-semibold text-slate-700 truncate max-w-[80px]" title={ev.evaluatorName}>{ev.evaluatorName.split(' ')[0]}</td>
+                                                <td className="px-2 py-2 text-center font-mono text-slate-600">{ev.peel.point}</td>
+                                                <td className="px-2 py-2 text-center font-mono text-slate-600">{ev.peel.evidence}</td>
+                                                <td className="px-2 py-2 text-center font-mono text-slate-600">{ev.peel.explanation}</td>
+                                                <td className="px-2 py-2 text-center font-mono text-slate-600">{ev.peel.link}</td>
+                                                <td className="px-2 py-2 text-right font-bold text-slate-900">
+                                                    {(ev.peel.point + ev.peel.evidence + ev.peel.explanation + ev.peel.link).toFixed(1).replace(/\.0$/, '')}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {showSecondary && (
+                        <div className="space-y-5 mb-8 animate-fade-in border-t border-slate-100 pt-4">
+                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Secondary (0-10)</h3>
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="text-center p-2 bg-indigo-50 rounded-lg">
+                                    <div className="text-lg font-bold text-indigo-600">{stats.secondary.logic}</div>
+                                    <div className="text-[9px] uppercase font-bold text-indigo-400">Logic</div>
+                                </div>
+                                <div className="text-center p-2 bg-indigo-50 rounded-lg">
+                                    <div className="text-lg font-bold text-indigo-600">{stats.secondary.clarity}</div>
+                                    <div className="text-[9px] uppercase font-bold text-indigo-400">Clarity</div>
+                                </div>
+                                <div className="text-center p-2 bg-indigo-50 rounded-lg">
+                                    <div className="text-lg font-bold text-indigo-600">{stats.secondary.fairness}</div>
+                                    <div className="text-[9px] uppercase font-bold text-indigo-400">Fairness</div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const EvaluateForm = ({ students, onSave }) => {
+            const [selectedId, setSelectedId] = useState(students[0]?.id);
+            const [evaluatorId, setEvaluatorId] = useState('');
+            const [scores, setScores] = useState({ point: 15, evidence: 15, explanation: 15, link: 15, logic: 5, clarity: 5, fairness: 5 });
+            const [comments, setComments] = useState({ point: '', evidence: '', explanation: '', link: '' });
+
+            const availableEvaluators = students.filter(s => s.id !== Number(selectedId));
+            const studentToEvaluate = students.find(s => s.id === Number(selectedId)) || students[0];
+
+            useEffect(() => {
+                if (Number(evaluatorId) === Number(selectedId)) setEvaluatorId('');
+            }, [selectedId, evaluatorId]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!evaluatorId) { alert('Please select an evaluator'); return; }
+                const evaluatorName = students.find(s => s.id === Number(evaluatorId))?.name || "Unknown";
+
+                onSave(selectedId, {
+                    evaluatorId,
+                    evaluatorName: evaluatorName,
+                    peel: { point: Number(scores.point), evidence: Number(scores.evidence), explanation: Number(scores.explanation), link: Number(scores.link) },
+                    comments: comments,
+                    secondary: { logic: Number(scores.logic), clarity: Number(scores.clarity), fairness: Number(scores.fairness) }
+                });
+            };
+
+            const EvaluationRow = ({ sectionTitle, sectionContent, scoreKey, score, comment, color }) => (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 border border-slate-200 rounded-xl overflow-hidden shadow-sm mb-6 bg-white">
+                    {/* Left: 1/3 Controls */}
+                    <div className="col-span-1 p-6 bg-slate-50 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col justify-between">
+                        <div>
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className={`text-sm font-bold uppercase tracking-wider ${color.text} flex items-center gap-2`}>
+                                    <div className={`w-2 h-2 rounded-full ${color.bg}`}></div>
+                                    Review {sectionTitle}
+                                </h4>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="number" min="0" max="25" step="0.5" value={score}
+                                        onChange={e => setScores({ ...scores, [scoreKey]: Math.min(25, Math.max(0, e.target.value)) })}
+                                        className="w-16 p-1 text-center font-bold text-slate-800 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                    <span className="text-xs text-slate-400 font-bold">/ 25</span>
+                                </div>
+                            </div>
+                            <input
+                                type="range" min="0" max="25" step="0.5" value={score}
+                                onChange={e => setScores({ ...scores, [scoreKey]: Number(e.target.value) })}
+                                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer mb-5 accent-blue-600"
+                            />
+                            <textarea
+                                placeholder={`Remarks for ${sectionTitle}...`}
+                                className="w-full text-xs p-3 bg-white border border-slate-200 rounded-lg resize-none h-24 focus:border-blue-400 outline-none transition-all"
+                                value={comment}
+                                onChange={e => setComments({ ...comments, [scoreKey]: e.target.value })}
+                            ></textarea>
+                        </div>
+                    </div>
+                    {/* Right: 2/3 Content */}
+                    <div className="col-span-1 lg:col-span-2 p-6 bg-white overflow-y-auto max-h-[300px]">
+                        <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Review {sectionTitle}</h5>
+                        <p className="font-serif text-slate-800 leading-relaxed text-[15px] whitespace-pre-wrap">{sectionContent}</p>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="max-w-7xl mx-auto p-2 animate-fade-in pb-20">
+                    <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-gray-200 pb-6">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Evaluation Mode</h2>
+                            <p className="text-slate-500">Review student arguments side-by-side with scoring.</p>
+                        </div>
+                        <div className="flex gap-4 items-end">
+                            <div className="flex flex-col gap-1 w-48">
+                                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Evaluate Student</label>
+                                <select
+                                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                                    value={selectedId}
+                                    onChange={e => setSelectedId(Number(e.target.value))}
+                                >
+                                    {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-1 w-48">
+                                <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Evaluated By</label>
+                                <select
+                                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                                    value={evaluatorId}
+                                    onChange={e => setEvaluatorId(e.target.value)}
+                                >
+                                    <option value="">Select Evaluator...</option>
+                                    {availableEvaluators.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    </header>
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <EvaluationRow sectionTitle="Point" sectionContent={studentToEvaluate.peel.point} scoreKey="point" score={scores.point} comment={comments.point} color={{ text: 'text-blue-600', bg: 'bg-blue-600' }} />
+                        <EvaluationRow sectionTitle="Evidence" sectionContent={studentToEvaluate.peel.evidence} scoreKey="evidence" score={scores.evidence} comment={comments.evidence} color={{ text: 'text-green-600', bg: 'bg-green-600' }} />
+                        <EvaluationRow sectionTitle="Explanation" sectionContent={studentToEvaluate.peel.explanation} scoreKey="explanation" score={scores.explanation} comment={comments.explanation} color={{ text: 'text-amber-600', bg: 'bg-amber-600' }} />
+                        <EvaluationRow sectionTitle="Link" sectionContent={studentToEvaluate.peel.link} scoreKey="link" score={scores.link} comment={comments.link} color={{ text: 'text-purple-600', bg: 'bg-purple-600' }} />
+
+                        <div className="fixed bottom-0 right-0 w-full md:w-[calc(100%-18rem)] bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 flex justify-end items-center gap-4 z-30">
+                            <div className="text-right mr-4 hidden md:block">
+                                <div className="text-xs text-slate-500 font-bold uppercase">Total Score</div>
+                                <div className="text-2xl font-bold text-slate-900">
+                                    {(Number(scores.point) + Number(scores.evidence) + Number(scores.explanation) + Number(scores.link)).toFixed(1).replace(/\.0$/, '')}
+                                    <span className="text-sm text-slate-400 font-medium">/100</span>
+                                </div>
+                            </div>
+                            <button type="submit" className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transform hover:-translate-y-0.5 transition-all flex items-center gap-2">
+                                <Icons.CheckCircle size={18} />
+                                Submit Evaluation
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        };
+
+        const AddArgumentForm = ({ onSave, initialData }) => {
+            const [formData, setFormData] = useState({
+                name: initialData?.name || '',
+                topic: initialData?.topic || '',
+                point: initialData?.peel?.point || '',
+                evidence: initialData?.peel?.evidence || '',
+                explanation: initialData?.peel?.explanation || '',
+                link: initialData?.peel?.link || ''
+            });
+
+            const handleSubmit = (e) => { e.preventDefault(); onSave(formData); };
+            const InputField = ({ label, name, placeholder, isArea }) => (
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">{label}</label>
+                    {isArea ? (
+                        <textarea className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-serif text-sm h-32 resize-none" placeholder={placeholder} value={formData[name]} onChange={e => setFormData({ ...formData, [name]: e.target.value })} required />
+                    ) : (
+                        <input type="text" className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-sans text-sm font-medium" placeholder={placeholder} value={formData[name]} onChange={e => setFormData({ ...formData, [name]: e.target.value })} required />
+                    )}
+                </div>
+            );
+            return (
+                <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8 border border-slate-100 animate-fade-in my-8">
+                    <div className="flex items-center gap-3 mb-8 pb-6 border-b border-slate-100">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Icons.PenTool size={24} /></div>
+                        <div><h2 className="text-xl font-bold text-slate-800">{initialData ? 'Edit Argument' : 'Draft New Argument'}</h2></div>
+                    </div>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                            <InputField label="Student Name" name="name" placeholder="Name" />
+                            <InputField label="Topic" name="topic" placeholder="Topic" />
+                        </div>
+                        <div className="space-y-4 pt-4">
+                            <InputField label="Point" name="point" placeholder="Main argument..." isArea />
+                            <InputField label="Evidence" name="evidence" placeholder="Supporting evidence..." isArea />
+                            <InputField label="Explanation" name="explanation" placeholder="Analysis..." isArea />
+                            <InputField label="Link" name="link" placeholder="Conclusion..." isArea />
+                        </div>
+                        <button type="submit" className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-all">
+                            {initialData ? 'Update Argument' : 'Publish Argument'}
+                        </button>
+                    </form>
+                </div>
+            );
+        };
+
+        const AdminPanel = ({ students, onReset, onDelete, onEdit, onImport, onExport }) => {
+            const fileInputRef = useRef(null);
+
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = new Uint8Array(event.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+
+                        // Parse Students List
+                        const studentsSheet = workbook.Sheets['Students'];
+                        if (!studentsSheet) throw new Error("Missing 'Students' sheet");
+                        const studentsRaw = XLSX.utils.sheet_to_json(studentsSheet);
+
+                        // Parse Evaluations List
+                        const evaluationsSheet = workbook.Sheets['Evaluations'];
+                        const evaluationsRaw = evaluationsSheet ? XLSX.utils.sheet_to_json(evaluationsSheet) : [];
+
+                        // Reconstruct Data Structure
+                        const newStudentData = studentsRaw.map(s => ({
+                            id: s.ID,
+                            name: s.Name,
+                            topic: s.Topic,
+                            peel: {
+                                point: s.Point || "",
+                                evidence: s.Evidence || "",
+                                explanation: s.Explanation || "",
+                                link: s.Link || ""
+                            },
+                            evaluations: []
+                        }));
+
+                        // Attach Evaluations
+                        evaluationsRaw.forEach(ev => {
+                            const student = newStudentData.find(s => s.id === ev.StudentID);
+                            if (student) {
+                                student.evaluations.push({
+                                    evaluatorId: ev.EvaluatorID,
+                                    evaluatorName: ev.EvaluatorName,
+                                    peel: {
+                                        point: Number(ev.PointScore || 0),
+                                        evidence: Number(ev.EvidenceScore || 0),
+                                        explanation: Number(ev.ExplanationScore || 0),
+                                        link: Number(ev.LinkScore || 0)
+                                    },
+                                    comments: {
+                                        point: ev.PointComment || "",
+                                        evidence: ev.EvidenceComment || "",
+                                        explanation: ev.ExplanationComment || "",
+                                        link: ev.LinkComment || ""
+                                    },
+                                    secondary: {
+                                        logic: Number(ev.LogicScore || 0),
+                                        clarity: Number(ev.ClarityScore || 0),
+                                        fairness: Number(ev.FairnessScore || 0)
+                                    }
+                                });
+                            }
+                        });
+
+                        if (confirm("This will overwrite all current data with the imported Excel file. Proceed?")) {
+                            onImport(newStudentData);
+                        }
+                    } catch (err) {
+                        alert("Error parsing Excel file: " + err.message);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            };
+
+            return (
+                <div className="max-w-5xl mx-auto p-4 md:p-8 animate-fade-in">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 pb-8 border-b gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-3 bg-slate-800 text-white rounded-xl shadow-lg"><Icons.Settings size={28} /></div>
+                            <div>
+                                <h2 className="text-2xl font-bold text-slate-900">Admin Console</h2>
+                                <p className="text-slate-500 text-sm">Manage database, users, and system validation.</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                onClick={onExport}
+                                className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg border border-green-200 hover:bg-green-100 font-bold text-sm transition-colors"
+                            >
+                                <Icons.Download size={16} /> Export Excel
+                            </button>
+                            <input
+                                type="file"
+                                accept=".xlsx, .xls"
+                                ref={fileInputRef}
+                                onChange={handleFileChange}
+                                className="hidden"
+                            />
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-200 hover:bg-blue-100 font-bold text-sm transition-colors"
+                            >
+                                <Icons.Upload size={16} /> Import Excel
+                            </button>
+                            <button
+                                onClick={() => { if (confirm('Are you sure you want to ERASE ALL DATA? This cannot be undone.')) onReset() }}
+                                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg border border-red-200 hover:bg-red-100 font-bold text-sm transition-colors"
+                            >
+                                <Icons.Trash size={16} /> Hard Reset
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-gray-200">
+                                <tr>
+                                    <th className="px-6 py-4">ID</th>
+                                    <th className="px-6 py-4">Name</th>
+                                    <th className="px-6 py-4">Topic</th>
+                                    <th className="px-6 py-4 text-center">Evaluations</th>
+                                    <th className="px-6 py-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {students.map(s => (
+                                    <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
+                                        <td className="px-6 py-4 font-mono text-slate-400">#{s.id}</td>
+                                        <td className="px-6 py-4 font-bold text-slate-800">{s.name}</td>
+                                        <td className="px-6 py-4 text-slate-600 max-w-xs truncate">{s.topic}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="px-2 py-1 bg-slate-100 rounded-md text-xs font-bold text-slate-600">{s.evaluations.length}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                            <button
+                                                onClick={() => onEdit(s)}
+                                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100"
+                                                title="Edit User"
+                                            >
+                                                <Icons.Edit size={16} />
+                                            </button>
+                                            <button
+                                                onClick={() => { if (confirm(`Delete ${s.name}?`)) onDelete(s.id) }}
+                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                                                title="Delete User"
+                                            >
+                                                <Icons.Trash size={16} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            // Persistent State
+            const [data, setData] = useState(() => {
+                const saved = localStorage.getItem('criticalThinkingDB');
+                return saved ? JSON.parse(saved) : initialStudentData;
+            });
+            const [selectedId, setSelectedId] = useState(1);
+            const [view, setView] = useState('dashboard');
+            const [editingStudent, setEditingStudent] = useState(null);
+
+            // Save to LocalStorage whenever data changes
+            useEffect(() => {
+                localStorage.setItem('criticalThinkingDB', JSON.stringify(data));
+            }, [data]);
+
+            const activeStudent = data.find(s => s.id === selectedId) || data[0];
+
+            const handleAddStudent = (formData) => {
+                if (editingStudent) {
+                    // Update existing
+                    setData(prev => prev.map(s => s.id === editingStudent.id ? { ...s, name: formData.name, topic: formData.topic, peel: { ...formData.peel, ...formData } } : s));
+                    setEditingStudent(null);
+                } else {
+                    // Create new
+                    const newId = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 1;
+                    const newStudent = { id: newId, name: formData.name, topic: formData.topic, peel: { ...formData }, evaluations: [] };
+                    setData([...data, newStudent]);
+                    setSelectedId(newId);
+                }
+                setView('dashboard');
+            };
+
+            const handleAddEvaluation = (studentId, evaluation) => {
+                setData(prevData => prevData.map(student => {
+                    if (student.id === studentId) return { ...student, evaluations: [...student.evaluations, evaluation] };
+                    return student;
+                }));
+                setSelectedId(studentId);
+                setView('dashboard');
+            };
+
+            const handleHardReset = () => {
+                localStorage.removeItem('criticalThinkingDB');
+                setData(initialStudentData);
+                setView('dashboard');
+            };
+
+            const handleDeleteStudent = (id) => {
+                const newData = data.filter(s => s.id !== id);
+                setData(newData);
+                if (newData.length > 0) setSelectedId(newData[0].id);
+            };
+
+            const handleEditStart = (student) => {
+                setEditingStudent(student);
+                setView('add');
+            };
+
+            const handleImport = (newData) => {
+                setData(newData);
+                setView('dashboard');
+                alert('Database imported successfully!');
+            };
+
+            const handleExport = () => {
+                // Flatten Data for Excel
+                // Sheet 1: Students
+                const studentsSheetData = data.map(s => ({
+                    ID: s.id,
+                    Name: s.name,
+                    Topic: s.topic,
+                    Point: s.peel.point,
+                    Evidence: s.peel.evidence,
+                    Explanation: s.peel.explanation,
+                    Link: s.peel.link
+                }));
+
+                // Sheet 2: Evaluations
+                const evaluationsSheetData = [];
+                data.forEach(s => {
+                    s.evaluations.forEach(ev => {
+                        evaluationsSheetData.push({
+                            StudentID: s.id,
+                            StudentName: s.name,
+                            EvaluatorID: ev.evaluatorId,
+                            EvaluatorName: ev.evaluatorName,
+                            PointScore: ev.peel.point,
+                            EvidenceScore: ev.peel.evidence,
+                            ExplanationScore: ev.peel.explanation,
+                            LinkScore: ev.peel.link,
+                            PointComment: ev.comments?.point || "",
+                            EvidenceComment: ev.comments?.evidence || "",
+                            ExplanationComment: ev.comments?.explanation || "",
+                            LinkComment: ev.comments?.link || "",
+                            LogicScore: ev.secondary?.logic || 0,
+                            ClarityScore: ev.secondary?.clarity || 0,
+                            FairnessScore: ev.secondary?.fairness || 0
+                        });
+                    });
+                });
+
+                // Create Workbook
+                const wb = XLSX.utils.book_new();
+
+                const wsStudents = XLSX.utils.json_to_sheet(studentsSheetData);
+                XLSX.utils.book_append_sheet(wb, wsStudents, "Students");
+
+                const wsEvaluations = XLSX.utils.json_to_sheet(evaluationsSheetData);
+                XLSX.utils.book_append_sheet(wb, wsEvaluations, "Evaluations");
+
+                // Export
+                XLSX.writeFile(wb, `CriticalThinkingDB_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            };
+
+            const formattedId = activeStudent ? activeStudent.id.toString().padStart(3, '0') : '000';
+
+            return (
+                <div className="flex h-screen md:flex-row flex-col bg-slate-50 overflow-hidden font-sans">
+                    <Sidebar students={data} selectedId={selectedId} onSelect={setSelectedId} currentView={view} onViewChange={(v) => {
+                        if (v === 'add') setEditingStudent(null);
+                        setView(v);
+                    }} />
+                    <main className="flex-1 h-full overflow-y-auto overflow-x-hidden relative scroll-smooth">
+                        <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-blue-100/40 rounded-full blur-3xl -z-10 -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                        <div className="max-w-7xl mx-auto p-4 md:p-8 min-h-full">
+                            {view === 'dashboard' && activeStudent && (
+                                <div className="animate-fade-in">
+                                    <header className="mb-8 pl-1">
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+                                            <div>
+                                                <div className="flex items-center gap-2 text-slate-400 text-sm mb-2 font-medium">
+                                                    <Icons.Users size={16} />
+                                                    <span>Overview</span>
+                                                    <Icons.ChevronRight size={14} />
+                                                    <span className="text-slate-600 font-bold">{activeStudent.name}</span>
+                                                </div>
+                                                <h1 className="text-3xl font-bold text-slate-900 leading-tight">{activeStudent.topic}</h1>
+                                            </div>
+                                            <div className="flex-shrink-0">
+                                                <span className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm font-medium text-slate-600 text-sm">
+                                                    <Icons.Brain size={18} className="text-indigo-500" />
+                                                    <span className="tabular-nums">ID: #{formattedId}</span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </header>
+                                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                                        <div className="lg:col-span-7 grid grid-cols-1 gap-4 content-start">
+                                            <PeelCard variant="Point" content={activeStudent.peel.point} />
+                                            <PeelCard variant="Evidence" content={activeStudent.peel.evidence} />
+                                            <PeelCard variant="Explanation" content={activeStudent.peel.explanation} />
+                                            <PeelCard variant="Link" content={activeStudent.peel.link} />
+                                        </div>
+                                        <div className="lg:col-span-5">
+                                            <EvaluationDashboard student={activeStudent} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {view === 'add' && <AddArgumentForm onSave={handleAddStudent} initialData={editingStudent} />}
+                            {view === 'evaluate' && <EvaluateForm students={data} onSave={handleAddEvaluation} />}
+                            {view === 'admin' && <AdminPanel students={data} onReset={handleHardReset} onDelete={handleDeleteStudent} onEdit={handleEditStart} onImport={handleImport} onExport={handleExport} />}
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
