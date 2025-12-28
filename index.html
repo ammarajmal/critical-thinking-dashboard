@@ -900,7 +900,12 @@
                     const newStudent = {
                         name: formData.name,
                         topic: formData.topic,
-                        peel: { ...formData.peel },
+                        peel: {
+                            point: formData.point || "",
+                            evidence: formData.evidence || "",
+                            explanation: formData.explanation || "",
+                            link: formData.link || ""
+                        },
                         evaluations: editingStudent ? (editingStudent.evaluations || []) : []
                     };
 
