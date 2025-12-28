@@ -51,6 +51,11 @@
     <!-- SheetJS (xlsx) for Excel Export/Import -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -110,13 +115,165 @@
             Upload: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></>} />,
         };
 
-        const initialStudentData = [
-            { id: 1, name: "Ammar Ajmal", topic: "Guardians of the Status Quo", peel: { point: "The religious establishment in Pakistan systematically unites against any reformer who attempts to present Islam as a 'Deen' (system) rather than a 'Mazhab' (ritual).", evidence: "Historical fatwas against Maududi, marginalization of Dr. Israr Ahmed, and recent coordinated attacks on Sahil Adeem.", explanation: "This is a defense mechanism (Wahan). By reducing Islam to private worship, the clergy protects their monopoly and relationship with the political elite, similar to the Medieval Church.", link: "Therefore, the primary obstacle to a just system is the religious establishment's active suppression of political Islam." }, evaluations: [{ evaluatorId: 2, evaluatorName: "Ramish Dars", peel: { point: 22, evidence: 20, explanation: 22, link: 20 }, comments: { point: "Strong opening.", evidence: "Good historical context.", explanation: "Logical.", link: "Clear conclusion." }, secondary: { logic: 9, clarity: 9, fairness: 8 } }, { evaluatorId: 4, evaluatorName: "Shoaib Najeeb", peel: { point: 24, evidence: 23, explanation: 23, link: 22 }, comments: { point: "Excellent.", evidence: "Very relevant.", explanation: "Deep insight.", link: "Well connected." }, secondary: { logic: 10, clarity: 9, fairness: 9 } }] },
-            { id: 2, name: "Ramish Dars", topic: "Modesty in Nikkah vs. Israaf", peel: { point: "Celebrating Nikkah modestly aligns with Islamic values and reduces financial stress, allowing focus on the spiritual essence of marriage.", evidence: "Quran (7:31, 17:26) forbids Israaf. Gallup 2025 survey shows 25% of families take loans (avg 1.4M PKR) for weddings.", explanation: "Extravagance is equated with satanic actions (waste). Social pressure forces debt, whereas modesty upholds justice and prevents financial burden.", link: "Therefore, modest Nikkah builds stronger, debt-free marriages and a balanced society." }, evaluations: [{ evaluatorId: 1, evaluatorName: "Ammar Ajmal", peel: { point: 23, evidence: 25, explanation: 22, link: 22 }, comments: {}, secondary: { logic: 9, clarity: 9, fairness: 9 } }, { evaluatorId: 3, evaluatorName: "Vaneeza Tariq", peel: { point: 20, evidence: 22, explanation: 22, link: 25 }, comments: {}, secondary: { logic: 8, clarity: 9, fairness: 10 } }] },
-        ];
+        // ----------------------------------------------------
+        // FIREBASE & UTILS
+        // ----------------------------------------------------
+        const DATA_COLLECTION = 'students';
+
+        const useFirebase = () => {
+            const [status, setStatus] = useState('loading'); // loading, setup, auth, ready
+            const [user, setUser] = useState(null);
+            const [db, setDb] = useState(null);
+
+            useEffect(() => {
+                const checkConfig = async () => {
+                    const storedConfig = localStorage.getItem('firebaseConfig');
+                    if (!storedConfig) {
+                        setStatus('setup');
+                        return;
+                    }
+                    try {
+                        const config = JSON.parse(storedConfig);
+                        if (!firebase.apps.length) {
+                            firebase.initializeApp(config);
+                        }
+                        setDb(firebase.firestore());
+
+                        firebase.auth().onAuthStateChanged((u) => {
+                            if (u) {
+                                setUser(u);
+                                setStatus('ready');
+                            } else {
+                                setStatus('auth');
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Firebase init error:", e);
+                        setStatus('setup');
+                    }
+                };
+                checkConfig();
+            }, []);
+
+            return { status, user, db, setStatus };
+        };
 
         // ----------------------------------------------------
-        // LOGIC 
+        // AUTH & SETUP COMPONENTS
+        // ----------------------------------------------------
+
+        const SetupScreen = ({ onSave }) => {
+            const [config, setConfig] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSave = () => {
+                try {
+                    const parsed = JSON.parse(config);
+                    if (!parsed.apiKey || !parsed.projectId) throw new Error("Invalid Config Object");
+                    localStorage.setItem('firebaseConfig', JSON.stringify(parsed));
+                    window.location.reload();
+                } catch (e) {
+                    setError('Invalid JSON. Please copy the object from your Firebase Console.');
+                }
+            };
+
+            return (
+                <div className="flex flex-col items-center justify-center h-screen bg-slate-50 p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-slate-100">
+                        <div className="flex items-center gap-3 mb-6 text-slate-800">
+                            <div className="p-3 bg-blue-600 rounded-lg text-white"><Icons.Settings size={24} /></div>
+                            <h1 className="text-2xl font-bold">System Setup</h1>
+                        </div>
+                        <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                            To enable <strong className="text-slate-700">Real-time Sync & Auth</strong>, you need to connect a Firebase Project.
+                            <br /><br />
+                            1. Go to <a href="https://console.firebase.google.com" target="_blank" className="text-blue-600 underline hover:text-blue-800">Firebase Console</a>.<br />
+                            2. Create a project and add a Web App.<br />
+                            3. Copy the <code>firebaseConfig</code> object and paste it below.
+                        </p>
+                        <textarea
+                            className="w-full h-40 p-3 text-xs font-mono border border-slate-200 rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none resize-none mb-4"
+                            placeholder='{ "apiKey": "...", "authDomain": "...", ... }'
+                            value={config}
+                            onChange={(e) => setConfig(e.target.value)}
+                        ></textarea>
+                        {error && <p className="text-red-500 text-xs font-bold mb-4">{error}</p>}
+                        <button onClick={handleSave} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-lg">
+                            Connect Database
+                        </button>
+                        <button onClick={() => { localStorage.setItem('skipInfo', 'true'); window.location.reload(); }} className="mt-4 w-full py-2 text-slate-400 hover:text-slate-600 font-medium text-xs">
+                            Or continue in Offline Mode (Demo)
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const AuthScreen = ({ onLogin }) => {
+            const [isRegister, setIsRegister] = useState(false);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleAuth = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+                try {
+                    if (isRegister) {
+                        await firebase.auth().createUserWithEmailAndPassword(email, password);
+                    } else {
+                        await firebase.auth().signInWithEmailAndPassword(email, password);
+                    }
+                } catch (err) {
+                    setError(err.message);
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="flex flex-col items-center justify-center h-screen bg-slate-50 p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full border border-slate-100 animate-fade-in">
+                        <div className="flex justify-center mb-6">
+                            <div className="p-4 bg-slate-900 text-white rounded-2xl shadow-lg">
+                                <Icons.Brain size={32} />
+                            </div>
+                        </div>
+                        <h2 className="text-center text-2xl font-bold text-slate-800 mb-2">{isRegister ? 'Create Account' : 'Welcome Back'}</h2>
+                        <p className="text-center text-slate-500 text-sm mb-8">Sign in to access the Dashboard.</p>
+
+                        <form onSubmit={handleAuth} className="space-y-4">
+                            <div>
+                                <label className="text-xs font-bold uppercase text-slate-500 tracking-wider ml-1">Email</label>
+                                <input type="email" required className="w-full p-3 mt-1 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium" value={email} onChange={e => setEmail(e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold uppercase text-slate-500 tracking-wider ml-1">Password</label>
+                                <input type="password" required minLength="6" className="w-full p-3 mt-1 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-medium" value={password} onChange={e => setPassword(e.target.value)} />
+                            </div>
+                            {error && <p className="text-red-500 text-xs font-bold">{error}</p>}
+                            <button type="submit" disabled={loading} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-lg disabled:opacity-50">
+                                {loading ? 'Processing...' : (isRegister ? 'Sign Up' : 'Sign In')}
+                            </button>
+                        </form>
+                        <div className="mt-6 text-center">
+                            <button onClick={() => setIsRegister(!isRegister)} className="text-sm text-slate-500 hover:text-blue-600 font-medium">
+                                {isRegister ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
+                            </button>
+                        </div>
+                        <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+                            <button onClick={() => { localStorage.removeItem('firebaseConfig'); window.location.reload(); }} className="text-xs text-slate-400 hover:text-red-500 flex items-center justify-center gap-1 mx-auto">
+                                <Icons.Settings size={12} /> Reset Configuration
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ----------------------------------------------------
+        // LOGIC REPLACEMENTS
         // ----------------------------------------------------
         const calculateStats = (evaluations) => {
             if (!evaluations || evaluations.length === 0) return {
@@ -685,132 +842,160 @@
         };
 
         const App = () => {
-            // Persistent State
-            const [data, setData] = useState(() => {
+            const { status, user, db, setStatus } = useFirebase();
+            const [localData, setLocalData] = useState(() => {
                 const saved = localStorage.getItem('criticalThinkingDB');
-                return saved ? JSON.parse(saved) : initialStudentData;
+                const initial = [
+                    { id: 1, name: "Ammar Ajmal", topic: "Guardians of the Status Quo", peel: { point: "The religious establishment in Pakistan systematically unites against any reformer who attempts to present Islam as a 'Deen' (system) rather than a 'Mazhab' (ritual).", evidence: "Historical fatwas against Maududi, marginalization of Dr. Israr Ahmed, and recent coordinated attacks on Sahil Adeem.", explanation: "This is a defense mechanism (Wahan). By reducing Islam to private worship, the clergy protects their monopoly and relationship with the political elite, similar to the Medieval Church.", link: "Therefore, the primary obstacle to a just system is the religious establishment's active suppression of political Islam." }, evaluations: [{ evaluatorId: 2, evaluatorName: "Ramish Dars", peel: { point: 22, evidence: 20, explanation: 22, link: 20 }, comments: { point: "Strong opening.", evidence: "Good historical context.", explanation: "Logical.", link: "Clear conclusion." }, secondary: { logic: 9, clarity: 9, fairness: 8 } }, { evaluatorId: 4, evaluatorName: "Shoaib Najeeb", peel: { point: 24, evidence: 23, explanation: 23, link: 22 }, comments: { point: "Excellent.", evidence: "Very relevant.", explanation: "Deep insight.", link: "Well connected." }, secondary: { logic: 10, clarity: 9, fairness: 9 } }] },
+                    { id: 2, name: "Ramish Dars", topic: "Modesty in Nikkah vs. Israaf", peel: { point: "Celebrating Nikkah modestly aligns with Islamic values and reduces financial stress, allowing focus on the spiritual essence of marriage.", evidence: "Quran (7:31, 17:26) forbids Israaf. Gallup 2025 survey shows 25% of families take loans (avg 1.4M PKR) for weddings.", explanation: "Extravagance is equated with satanic actions (waste). Social pressure forces debt, whereas modesty upholds justice and prevents financial burden.", link: "Therefore, modest Nikkah builds stronger, debt-free marriages and a balanced society." }, evaluations: [{ evaluatorId: 1, evaluatorName: "Ammar Ajmal", peel: { point: 23, evidence: 25, explanation: 22, link: 22 }, comments: {}, secondary: { logic: 9, clarity: 9, fairness: 9 } }, { evaluatorId: 3, evaluatorName: "Vaneeza Tariq", peel: { point: 20, evidence: 22, explanation: 22, link: 25 }, comments: {}, secondary: { logic: 8, clarity: 9, fairness: 10 } }] },
+                ];
+                return saved ? JSON.parse(saved) : initial;
             });
-            const [selectedId, setSelectedId] = useState(1);
-            const [view, setView] = useState('dashboard');
+            const [firestoreData, setFirestoreData] = useState([]);
+            const [selectedId, setSelectedId] = useState(null);
+            const [view, setView] = useState('dashboard'); // dashboard, add, evaluate, admin
             const [editingStudent, setEditingStudent] = useState(null);
 
-            // Save to LocalStorage whenever data changes
+            // Handle Offline Mode Skip
             useEffect(() => {
-                localStorage.setItem('criticalThinkingDB', JSON.stringify(data));
-            }, [data]);
-
-            const activeStudent = data.find(s => s.id === selectedId) || data[0];
-
-            const handleAddStudent = (formData) => {
-                if (editingStudent) {
-                    // Update existing
-                    setData(prev => prev.map(s => s.id === editingStudent.id ? { ...s, name: formData.name, topic: formData.topic, peel: { ...formData.peel, ...formData } } : s));
-                    setEditingStudent(null);
-                } else {
-                    // Create new
-                    const newId = data.length > 0 ? Math.max(...data.map(d => d.id)) + 1 : 1;
-                    const newStudent = { id: newId, name: formData.name, topic: formData.topic, peel: { ...formData }, evaluations: [] };
-                    setData([...data, newStudent]);
-                    setSelectedId(newId);
+                if (localStorage.getItem('skipInfo') === 'true' && status === 'setup') {
+                    setStatus('offline');
                 }
+            }, [status]);
+
+            // Sync with Firestore
+            useEffect(() => {
+                if (status === 'ready' && db) {
+                    const unsubscribe = db.collection(DATA_COLLECTION).onSnapshot(snapshot => {
+                        const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        // Sort by numeric ID if possible for stability
+                        students.sort((a, b) => Number(a.id) - Number(b.id));
+                        setFirestoreData(students);
+                        if (!selectedId && students.length > 0) setSelectedId(students[0].id);
+                    });
+                    return () => unsubscribe();
+                }
+            }, [status, db]);
+
+            // Fallback for offline mode initial selection
+            useEffect(() => {
+                if (status === 'offline' && !selectedId && localData.length > 0) {
+                    setSelectedId(localData[0].id);
+                }
+            }, [status, localData]);
+
+            // Unified Data Access
+            const data = (status === 'ready') ? firestoreData : localData;
+            const activeStudent = data.find(s => String(s.id) === String(selectedId)) || data[0];
+            const isAdmin = (status === 'offline') || (user && user.email && user.email.includes('admin')); // Simple Admin rule
+
+            // Actions
+            const saveStudent = async (formData) => {
+                const newStudent = {
+                    name: formData.name,
+                    topic: formData.topic,
+                    peel: { ...formData.peel },
+                    evaluations: editingStudent ? (editingStudent.evaluations || []) : []
+                };
+
+                if (status === 'ready') {
+                    if (editingStudent) {
+                        await db.collection(DATA_COLLECTION).doc(String(editingStudent.id)).update(newStudent);
+                    } else {
+                        const newId = String(Date.now()); // Simple unique ID
+                        await db.collection(DATA_COLLECTION).doc(newId).set({ id: newId, ...newStudent });
+                        setSelectedId(newId);
+                    }
+                } else {
+                    // LocalStorage Logic
+                    if (editingStudent) {
+                        const newData = localData.map(s => s.id === editingStudent.id ? { ...s, ...newStudent } : s);
+                        setLocalData(newData);
+                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                    } else {
+                        const newId = localData.length > 0 ? Math.max(...localData.map(d => d.id)) + 1 : 1;
+                        const newData = [...localData, { id: newId, ...newStudent }];
+                        setLocalData(newData);
+                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                        setSelectedId(newId);
+                    }
+                }
+                setEditingStudent(null);
                 setView('dashboard');
             };
 
-            const handleAddEvaluation = (studentId, evaluation) => {
-                setData(prevData => prevData.map(student => {
-                    if (student.id === studentId) return { ...student, evaluations: [...student.evaluations, evaluation] };
-                    return student;
-                }));
+            const saveEvaluation = async (studentId, evaluation) => {
+                if (status === 'ready') {
+                    const studentRef = db.collection(DATA_COLLECTION).doc(String(studentId));
+                    // use arrayUnion if possible, but for complex updates we often read-modify-write
+                    // simple robust way for now:
+                    const student = data.find(s => String(s.id) === String(studentId));
+                    if (student) {
+                        const newEvaluations = [...(student.evaluations || []), evaluation];
+                        await studentRef.update({ evaluations: newEvaluations });
+                    }
+                } else {
+                    const newData = localData.map(student => {
+                        if (student.id === studentId) return { ...student, evaluations: [...student.evaluations, evaluation] };
+                        return student;
+                    });
+                    setLocalData(newData);
+                    localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                }
                 setSelectedId(studentId);
                 setView('dashboard');
             };
 
-            const handleHardReset = () => {
+            const deleteStudent = async (id) => {
+                if (status === 'ready') {
+                    await db.collection(DATA_COLLECTION).doc(String(id)).delete();
+                } else {
+                    const newData = localData.filter(s => s.id !== id);
+                    setLocalData(newData);
+                    localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                    if (newData.length > 0) setSelectedId(newData[0].id);
+                }
+            };
+
+            const offlineReset = () => {
                 localStorage.removeItem('criticalThinkingDB');
-                setData(initialStudentData);
-                setView('dashboard');
+                window.location.reload();
             };
 
-            const handleDeleteStudent = (id) => {
-                const newData = data.filter(s => s.id !== id);
-                setData(newData);
-                if (newData.length > 0) setSelectedId(newData[0].id);
-            };
+            // Renders
+            if (status === 'loading') return <div className="h-screen w-screen flex items-center justify-center bg-slate-50 text-slate-400 font-bold animate-pulse">Loading System...</div>;
+            if (status === 'setup') return <SetupScreen />;
+            if (status === 'auth') return <AuthScreen />;
 
-            const handleEditStart = (student) => {
-                setEditingStudent(student);
-                setView('add');
-            };
-
-            const handleImport = (newData) => {
-                setData(newData);
-                setView('dashboard');
-                alert('Database imported successfully!');
-            };
-
-            const handleExport = () => {
-                // Flatten Data for Excel
-                // Sheet 1: Students
-                const studentsSheetData = data.map(s => ({
-                    ID: s.id,
-                    Name: s.name,
-                    Topic: s.topic,
-                    Point: s.peel.point,
-                    Evidence: s.peel.evidence,
-                    Explanation: s.peel.explanation,
-                    Link: s.peel.link
-                }));
-
-                // Sheet 2: Evaluations
-                const evaluationsSheetData = [];
-                data.forEach(s => {
-                    s.evaluations.forEach(ev => {
-                        evaluationsSheetData.push({
-                            StudentID: s.id,
-                            StudentName: s.name,
-                            EvaluatorID: ev.evaluatorId,
-                            EvaluatorName: ev.evaluatorName,
-                            PointScore: ev.peel.point,
-                            EvidenceScore: ev.peel.evidence,
-                            ExplanationScore: ev.peel.explanation,
-                            LinkScore: ev.peel.link,
-                            PointComment: ev.comments?.point || "",
-                            EvidenceComment: ev.comments?.evidence || "",
-                            ExplanationComment: ev.comments?.explanation || "",
-                            LinkComment: ev.comments?.link || "",
-                            LogicScore: ev.secondary?.logic || 0,
-                            ClarityScore: ev.secondary?.clarity || 0,
-                            FairnessScore: ev.secondary?.fairness || 0
-                        });
-                    });
-                });
-
-                // Create Workbook
-                const wb = XLSX.utils.book_new();
-
-                const wsStudents = XLSX.utils.json_to_sheet(studentsSheetData);
-                XLSX.utils.book_append_sheet(wb, wsStudents, "Students");
-
-                const wsEvaluations = XLSX.utils.json_to_sheet(evaluationsSheetData);
-                XLSX.utils.book_append_sheet(wb, wsEvaluations, "Evaluations");
-
-                // Export
-                XLSX.writeFile(wb, `CriticalThinkingDB_${new Date().toISOString().slice(0, 10)}.xlsx`);
-            };
-
-            const formattedId = activeStudent ? activeStudent.id.toString().padStart(3, '0') : '000';
+            // Main UI
+            const formattedId = activeStudent ? String(activeStudent.id).slice(-3) : '000';
 
             return (
                 <div className="flex h-screen md:flex-row flex-col bg-slate-50 overflow-hidden font-sans">
-                    <Sidebar students={data} selectedId={selectedId} onSelect={setSelectedId} currentView={view} onViewChange={(v) => {
-                        if (v === 'add') setEditingStudent(null);
-                        setView(v);
-                    }} />
+                    <Sidebar
+                        students={data}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        currentView={view}
+                        onViewChange={(v) => { if (v === 'add') setEditingStudent(null); setView(v); }}
+                    />
+
                     <main className="flex-1 h-full overflow-y-auto overflow-x-hidden relative scroll-smooth">
+                        {/* User Info Bar at Top Right */}
+                        {status === 'ready' && (
+                            <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-white/80 p-2 rounded-full shadow-sm border border-slate-200">
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] text-white font-bold">
+                                    {user.email[0].toUpperCase()}
+                                </div>
+                                <span className="text-xs font-medium text-slate-600 pr-2">{user.email}</span>
+                                <button onClick={() => firebase.auth().signOut()} className="text-slate-400 hover:text-red-500"><Icons.Layout size={12} /></button>
+                            </div>
+                        )}
+
                         <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-blue-100/40 rounded-full blur-3xl -z-10 -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                         <div className="max-w-7xl mx-auto p-4 md:p-8 min-h-full">
                             {view === 'dashboard' && activeStudent && (
-                                <div className="animate-fade-in">
+                                <div className="animate-fade-in pt-6 md:pt-0">
                                     <header className="mb-8 pl-1">
                                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                                             <div>
@@ -818,9 +1003,9 @@
                                                     <Icons.Users size={16} />
                                                     <span>Overview</span>
                                                     <Icons.ChevronRight size={14} />
-                                                    <span className="text-slate-600 font-bold">{activeStudent.name}</span>
+                                                    <span className="text-slate-600 font-bold">{activeStudent.name || 'Unknown'}</span>
                                                 </div>
-                                                <h1 className="text-3xl font-bold text-slate-900 leading-tight">{activeStudent.topic}</h1>
+                                                <h1 className="text-3xl font-bold text-slate-900 leading-tight">{activeStudent.topic || 'Untitled'}</h1>
                                             </div>
                                             <div className="flex-shrink-0">
                                                 <span className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm font-medium text-slate-600 text-sm">
@@ -843,9 +1028,27 @@
                                     </div>
                                 </div>
                             )}
-                            {view === 'add' && <AddArgumentForm onSave={handleAddStudent} initialData={editingStudent} />}
-                            {view === 'evaluate' && <EvaluateForm students={data} onSave={handleAddEvaluation} />}
-                            {view === 'admin' && <AdminPanel students={data} onReset={handleHardReset} onDelete={handleDeleteStudent} onEdit={handleEditStart} onImport={handleImport} onExport={handleExport} />}
+                            {view === 'add' && <AddArgumentForm onSave={saveStudent} initialData={editingStudent} />}
+                            {view === 'evaluate' && <EvaluateForm students={data} onSave={saveEvaluation} />}
+                            {view === 'admin' && isAdmin && (
+                                <AdminPanel
+                                    students={data}
+                                    onReset={status === 'ready' ? () => alert("Not allowed in Cloud Mode") : offlineReset}
+                                    onDelete={deleteStudent}
+                                    onEdit={(s) => { setEditingStudent(s); setView('add'); }}
+                                    onImport={(d) => { if (status === 'ready') alert('Use Excel locally or script for cloud import.'); else { setLocalData(d); setView('dashboard'); } }}
+                                    onExport={() => alert("Export works best in Offline mode for now.")}
+                                />
+                            )}
+                            {view === 'admin' && !isAdmin && (
+                                <div className="flex h-full items-center justify-center pt-20">
+                                    <div className="text-center">
+                                        <Icons.Layout size={48} className="mx-auto text-slate-300 mb-4" />
+                                        <h2 className="text-xl font-bold text-slate-700">Admin Access Restricted</h2>
+                                        <p className="text-slate-500 mt-2">You need an admin account to view this page.</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </main>
                 </div>
