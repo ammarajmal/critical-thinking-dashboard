@@ -516,13 +516,19 @@
             );
         };
 
-        const EvaluateForm = ({ students, onSave }) => {
+        const EvaluateForm = ({ students, onSave, currentUser }) => {
             const [selectedId, setSelectedId] = useState(students[0]?.id);
-            const [evaluatorId, setEvaluatorId] = useState('');
+            // Evaluator is forced to the logged‑in user – no dropdown selection allowed
+            const [evaluatorId, setEvaluatorId] = useState(currentUser?.uid || '');
             const [scores, setScores] = useState({ point: 15, evidence: 15, explanation: 15, link: 15, logic: 5, clarity: 5, fairness: 5 });
             const [comments, setComments] = useState({ point: '', evidence: '', explanation: '', link: '' });
+            // Keep evaluatorId in sync if user changes (e.g., sign‑out/in)
+            useEffect(() => {
+                setEvaluatorId(currentUser?.uid || '');
+            }, [currentUser]);
 
-            const availableEvaluators = students.filter(s => s.id !== Number(selectedId));
+
+            // The list of evaluators is no longer needed – we only allow the current user
             const studentToEvaluate = students.find(s => s.id === Number(selectedId)) || students[0];
 
             useEffect(() => {
@@ -531,12 +537,13 @@
 
             const handleSubmit = (e) => {
                 e.preventDefault();
-                if (!evaluatorId) { alert('Please select an evaluator'); return; }
-                const evaluatorName = students.find(s => s.id === Number(evaluatorId))?.name || "Unknown";
+                if (!currentUser) { alert('User not logged in'); return; }
+                const evaluatorId = currentUser.uid;
+                const evaluatorName = currentUser.email;
 
                 onSave(selectedId, {
                     evaluatorId,
-                    evaluatorName: evaluatorName,
+                    evaluatorName,
                     peel: { point: Number(scores.point), evidence: Number(scores.evidence), explanation: Number(scores.explanation), link: Number(scores.link) },
                     comments: comments,
                     secondary: { logic: Number(scores.logic), clarity: Number(scores.clarity), fairness: Number(scores.fairness) }
@@ -603,14 +610,12 @@
                             </div>
                             <div className="flex flex-col gap-1 w-48">
                                 <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Evaluated By</label>
-                                <select
-                                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
-                                    value={evaluatorId}
-                                    onChange={e => setEvaluatorId(e.target.value)}
-                                >
-                                    <option value="">Select Evaluator...</option>
-                                    {availableEvaluators.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
+                                <input
+                                    type="text"
+                                    className="w-full p-2.5 bg-gray-100 border border-slate-300 rounded-lg text-sm font-medium outline-none"
+                                    value={currentUser?.email || ''}
+                                    readOnly
+                                />
                             </div>
                         </div>
                     </header>
@@ -1053,7 +1058,7 @@
                                 </div>
                             )}
                             {view === 'add' && <AddArgumentForm onSave={saveStudent} initialData={editingStudent} />}
-                            {view === 'evaluate' && <EvaluateForm students={data} onSave={saveEvaluation} />}
+                            {view === 'evaluate' && <EvaluateForm students={data} onSave={saveEvaluation} currentUser={user} />}
                             {view === 'admin' && isAdmin && (
                                 <AdminPanel
                                     students={data}
