@@ -120,39 +120,41 @@
         // ----------------------------------------------------
         const DATA_COLLECTION = 'students';
 
+        // Hardcoded Config for easier sharing
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyDtd0vSBjzHVl45Ds4Bz1Zlf1ayI3lhpIw",
+            authDomain: "critical-thinking-app-4eb30.firebaseapp.com",
+            projectId: "critical-thinking-app-4eb30",
+            storageBucket: "critical-thinking-app-4eb30.firebasestorage.app",
+            messagingSenderId: "483025935816",
+            appId: "1:483025935816:web:394538dda29812e59a34fd",
+            measurementId: "G-6DRTK6KM34"
+        };
+
         const useFirebase = () => {
             const [status, setStatus] = useState('loading'); // loading, setup, auth, ready
             const [user, setUser] = useState(null);
             const [db, setDb] = useState(null);
 
             useEffect(() => {
-                const checkConfig = async () => {
-                    const storedConfig = localStorage.getItem('firebaseConfig');
-                    if (!storedConfig) {
-                        setStatus('setup');
-                        return;
+                try {
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp(FIREBASE_CONFIG);
                     }
-                    try {
-                        const config = JSON.parse(storedConfig);
-                        if (!firebase.apps.length) {
-                            firebase.initializeApp(config);
-                        }
-                        setDb(firebase.firestore());
+                    setDb(firebase.firestore());
 
-                        firebase.auth().onAuthStateChanged((u) => {
-                            if (u) {
-                                setUser(u);
-                                setStatus('ready');
-                            } else {
-                                setStatus('auth');
-                            }
-                        });
-                    } catch (e) {
-                        console.error("Firebase init error:", e);
-                        setStatus('setup');
-                    }
-                };
-                checkConfig();
+                    firebase.auth().onAuthStateChanged((u) => {
+                        if (u) {
+                            setUser(u);
+                            setStatus('ready');
+                        } else {
+                            setStatus('auth');
+                        }
+                    });
+                } catch (e) {
+                    console.error("Firebase init error:", e);
+                    setStatus('setup');
+                }
             }, []);
 
             return { status, user, db, setStatus };
