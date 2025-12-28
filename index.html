@@ -1060,7 +1060,27 @@
                                     onReset={status === 'ready' ? () => alert("Not allowed in Cloud Mode") : offlineReset}
                                     onDelete={deleteStudent}
                                     onEdit={(s) => { setEditingStudent(s); setView('add'); }}
-                                    onImport={(d) => { if (status === 'ready') alert('Use Excel locally or script for cloud import.'); else { setLocalData(d); setView('dashboard'); } }}
+                                    onImport={async (d) => {
+                                        if (status === 'ready') {
+                                            if (!confirm(`Importing ${d.length} students to Cloud Database. This will update/add records based on ID. Continue?`)) return;
+                                            try {
+                                                const batch = db.batch();
+                                                d.forEach(s => {
+                                                    const ref = db.collection(DATA_COLLECTION).doc(String(s.id));
+                                                    batch.set(ref, s);
+                                                });
+                                                await batch.commit();
+                                                alert('Cloud Import Successful! ☁️ Refreshing view...');
+                                                setView('dashboard');
+                                            } catch (e) {
+                                                alert('Import Failed: ' + e.message);
+                                                console.error(e);
+                                            }
+                                        } else {
+                                            setLocalData(d);
+                                            setView('dashboard');
+                                        }
+                                    }}
                                     onExport={() => alert("Export works best in Offline mode for now.")}
                                 />
                             )}
