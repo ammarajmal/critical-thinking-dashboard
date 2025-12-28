@@ -639,6 +639,17 @@
             );
         };
 
+        const InputField = ({ label, value, onChange, placeholder, isArea }) => (
+            <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">{label}</label>
+                {isArea ? (
+                    <textarea className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-serif text-sm h-32 resize-none" placeholder={placeholder} value={value} onChange={onChange} required />
+                ) : (
+                    <input type="text" className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-sans text-sm font-medium" placeholder={placeholder} value={value} onChange={onChange} required />
+                )}
+            </div>
+        );
+
         const AddArgumentForm = ({ onSave, initialData }) => {
             const [formData, setFormData] = useState({
                 name: initialData?.name || '',
@@ -650,16 +661,8 @@
             });
 
             const handleSubmit = (e) => { e.preventDefault(); onSave(formData); };
-            const InputField = ({ label, name, placeholder, isArea }) => (
-                <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">{label}</label>
-                    {isArea ? (
-                        <textarea className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-serif text-sm h-32 resize-none" placeholder={placeholder} value={formData[name]} onChange={e => setFormData({ ...formData, [name]: e.target.value })} required />
-                    ) : (
-                        <input type="text" className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-sans text-sm font-medium" placeholder={placeholder} value={formData[name]} onChange={e => setFormData({ ...formData, [name]: e.target.value })} required />
-                    )}
-                </div>
-            );
+            const handleChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
+
             return (
                 <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8 border border-slate-100 animate-fade-in my-8">
                     <div className="flex items-center gap-3 mb-8 pb-6 border-b border-slate-100">
@@ -668,14 +671,14 @@
                     </div>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid grid-cols-2 gap-4">
-                            <InputField label="Student Name" name="name" placeholder="Name" />
-                            <InputField label="Topic" name="topic" placeholder="Topic" />
+                            <InputField label="Student Name" value={formData.name} onChange={e => handleChange('name', e.target.value)} placeholder="Name" />
+                            <InputField label="Topic" value={formData.topic} onChange={e => handleChange('topic', e.target.value)} placeholder="Topic" />
                         </div>
                         <div className="space-y-4 pt-4">
-                            <InputField label="Point" name="point" placeholder="Main argument..." isArea />
-                            <InputField label="Evidence" name="evidence" placeholder="Supporting evidence..." isArea />
-                            <InputField label="Explanation" name="explanation" placeholder="Analysis..." isArea />
-                            <InputField label="Link" name="link" placeholder="Conclusion..." isArea />
+                            <InputField label="Point" value={formData.point} onChange={e => handleChange('point', e.target.value)} placeholder="Main argument..." isArea />
+                            <InputField label="Evidence" value={formData.evidence} onChange={e => handleChange('evidence', e.target.value)} placeholder="Supporting evidence..." isArea />
+                            <InputField label="Explanation" value={formData.explanation} onChange={e => handleChange('explanation', e.target.value)} placeholder="Analysis..." isArea />
+                            <InputField label="Link" value={formData.link} onChange={e => handleChange('link', e.target.value)} placeholder="Conclusion..." isArea />
                         </div>
                         <button type="submit" className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-all">
                             {initialData ? 'Update Argument' : 'Publish Argument'}
@@ -893,69 +896,83 @@
 
             // Actions
             const saveStudent = async (formData) => {
-                const newStudent = {
-                    name: formData.name,
-                    topic: formData.topic,
-                    peel: { ...formData.peel },
-                    evaluations: editingStudent ? (editingStudent.evaluations || []) : []
-                };
+                try {
+                    const newStudent = {
+                        name: formData.name,
+                        topic: formData.topic,
+                        peel: { ...formData.peel },
+                        evaluations: editingStudent ? (editingStudent.evaluations || []) : []
+                    };
 
-                if (status === 'ready') {
-                    if (editingStudent) {
-                        await db.collection(DATA_COLLECTION).doc(String(editingStudent.id)).update(newStudent);
+                    if (status === 'ready') {
+                        if (editingStudent) {
+                            await db.collection(DATA_COLLECTION).doc(String(editingStudent.id)).update(newStudent);
+                        } else {
+                            const newId = String(Date.now());
+                            await db.collection(DATA_COLLECTION).doc(newId).set({ id: newId, ...newStudent });
+                            setSelectedId(newId);
+                        }
                     } else {
-                        const newId = String(Date.now()); // Simple unique ID
-                        await db.collection(DATA_COLLECTION).doc(newId).set({ id: newId, ...newStudent });
-                        setSelectedId(newId);
+                        // LocalStorage Logic
+                        if (editingStudent) {
+                            const newData = localData.map(s => s.id === editingStudent.id ? { ...s, ...newStudent } : s);
+                            setLocalData(newData);
+                            localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                        } else {
+                            const newId = localData.length > 0 ? Math.max(...localData.map(d => d.id)) + 1 : 1;
+                            const newData = [...localData, { id: newId, ...newStudent }];
+                            setLocalData(newData);
+                            localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                            setSelectedId(newId);
+                        }
                     }
-                } else {
-                    // LocalStorage Logic
-                    if (editingStudent) {
-                        const newData = localData.map(s => s.id === editingStudent.id ? { ...s, ...newStudent } : s);
-                        setLocalData(newData);
-                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
-                    } else {
-                        const newId = localData.length > 0 ? Math.max(...localData.map(d => d.id)) + 1 : 1;
-                        const newData = [...localData, { id: newId, ...newStudent }];
-                        setLocalData(newData);
-                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
-                        setSelectedId(newId);
-                    }
+                    setEditingStudent(null);
+                    setView('dashboard');
+                } catch (e) {
+                    alert("Error Saving Data: " + e.message + "\n\n(Hint: Did you create the Firestore Database in the Console?)");
+                    console.error(e);
                 }
-                setEditingStudent(null);
-                setView('dashboard');
             };
 
             const saveEvaluation = async (studentId, evaluation) => {
-                if (status === 'ready') {
-                    const studentRef = db.collection(DATA_COLLECTION).doc(String(studentId));
-                    // use arrayUnion if possible, but for complex updates we often read-modify-write
-                    // simple robust way for now:
-                    const student = data.find(s => String(s.id) === String(studentId));
-                    if (student) {
-                        const newEvaluations = [...(student.evaluations || []), evaluation];
-                        await studentRef.update({ evaluations: newEvaluations });
+                try {
+                    if (status === 'ready') {
+                        const studentRef = db.collection(DATA_COLLECTION).doc(String(studentId));
+                        // Robust read-modify-write
+                        const doc = await studentRef.get();
+                        if (doc.exists) {
+                            const sData = doc.data();
+                            const newEvaluations = [...(sData.evaluations || []), evaluation];
+                            await studentRef.update({ evaluations: newEvaluations });
+                        }
+                    } else {
+                        const newData = localData.map(student => {
+                            if (student.id === studentId) return { ...student, evaluations: [...student.evaluations, evaluation] };
+                            return student;
+                        });
+                        setLocalData(newData);
+                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
                     }
-                } else {
-                    const newData = localData.map(student => {
-                        if (student.id === studentId) return { ...student, evaluations: [...student.evaluations, evaluation] };
-                        return student;
-                    });
-                    setLocalData(newData);
-                    localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                    setSelectedId(studentId);
+                    setView('dashboard');
+                } catch (e) {
+                    alert("Error Saving Evaluation: " + e.message);
                 }
-                setSelectedId(studentId);
-                setView('dashboard');
             };
 
             const deleteStudent = async (id) => {
-                if (status === 'ready') {
-                    await db.collection(DATA_COLLECTION).doc(String(id)).delete();
-                } else {
-                    const newData = localData.filter(s => s.id !== id);
-                    setLocalData(newData);
-                    localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
-                    if (newData.length > 0) setSelectedId(newData[0].id);
+                if (!confirm("Are you sure?")) return;
+                try {
+                    if (status === 'ready') {
+                        await db.collection(DATA_COLLECTION).doc(String(id)).delete();
+                    } else {
+                        const newData = localData.filter(s => s.id !== id);
+                        setLocalData(newData);
+                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                        if (newData.length > 0) setSelectedId(newData[0].id);
+                    }
+                } catch (e) {
+                    alert("Error Deleting: " + e.message);
                 }
             };
 
