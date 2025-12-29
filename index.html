@@ -5,7 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Critical Thinking Evaluation Dashboard</title>
-    <!-- Tailwind CSS -->
+    
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2490/2490642.png" type="image/png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -36,22 +38,17 @@
             }
         }
     </script>
-    <!-- Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700&display=swap"
         rel="stylesheet">
 
-    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 
-    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- SheetJS (xlsx) for Excel Export/Import -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 
-    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -113,6 +110,7 @@
             Save: (props) => <Icon {...props} path={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></>} />,
             Download: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>} />,
             Upload: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></>} />,
+            FilePlus: (props) => <Icon {...props} path={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" /></>} />,
         };
 
         // ----------------------------------------------------
@@ -515,6 +513,7 @@
                 </div>
             );
         };
+
         const EvaluateForm = ({ students, onSave, currentUser, onViewChange }) => {
             const [selectedId, setSelectedId] = useState(students[0]?.id);
             const [scores, setScores] = useState({ point: 15, evidence: 15, explanation: 15, link: 15, logic: 5, clarity: 5, fairness: 5 });
@@ -574,7 +573,6 @@
                 });
             };
 
-            // Helper for rendering rows (Same as before)
             const EvaluationRow = ({ sectionTitle, sectionContent, scoreKey, score, comment, color }) => (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 border border-slate-200 rounded-xl overflow-hidden shadow-sm mb-6 bg-white">
                     <div className="col-span-1 p-6 bg-slate-50 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col justify-between">
@@ -691,11 +689,12 @@
         );
 
         const AddArgumentForm = ({ onSave, students, user, isAdmin, initialData }) => {
+            // (B) PROFESSIONAL POLISH: LOADING STATE
+            const [isSubmitting, setIsSubmitting] = useState(false);
+
             // 1. Determine who is the "target" student being edited
-            // If Admin: Use the 'initialData' passed when they clicked Edit in Admin Panel
-            // If Student: Look for their own profile in the 'students' array using their UID
             const myProfile = React.useMemo(() => {
-                if (isAdmin) return initialData; // Admin edits whoever they selected
+                if (isAdmin) return initialData;
                 if (!user) return null;
                 return students.find(s => String(s.id) === String(user.uid));
             }, [isAdmin, initialData, user, students]);
@@ -726,19 +725,23 @@
                         link: myProfile.peel?.link || ''
                     });
                 } else if (user && !isAdmin) {
-                    // Pre-fill name/email for new users if possible
                     setFormData(prev => ({ ...prev, name: user.displayName || user.email.split('@')[0] }));
                 }
             }, [myProfile, user, isAdmin]);
 
-            const handleSubmit = (e) => {
+            const handleSubmit = async (e) => {
                 e.preventDefault();
+                setIsSubmitting(true); // Disable button
+                
                 if (isAdmin && hasEvaluations) {
                     if (!confirm("WARNING: This student has existing evaluations.\n\nSaving changes will DELETE all current evaluations and require reviewers to re-evaluate.\n\nProceed?")) {
+                        setIsSubmitting(false);
                         return;
                     }
                 }
-                onSave(formData, myProfile ? myProfile.id : null);
+                await onSave(formData, myProfile ? myProfile.id : null);
+                // No need to set false here as component likely unmounts, but if not:
+                // setIsSubmitting(false); 
             };
 
             const handleChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
@@ -790,8 +793,12 @@
                             <InputField label="Explanation" value={formData.explanation} onChange={e => handleChange('explanation', e.target.value)} placeholder="Analysis..." isArea />
                             <InputField label="Link" value={formData.link} onChange={e => handleChange('link', e.target.value)} placeholder="Conclusion..." isArea />
                         </div>
-                        <button type="submit" className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-all">
-                            {myProfile ? 'Update Argument' : 'Publish Argument'}
+                        <button 
+                            type="submit" 
+                            disabled={isSubmitting}
+                            className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isSubmitting ? 'Processing...' : (myProfile ? 'Update Argument' : 'Publish Argument')}
                         </button>
                     </form>
                 </div>
@@ -800,6 +807,16 @@
 
         const AdminPanel = ({ students, onReset, onDelete, onEdit, onImport, onExport }) => {
             const fileInputRef = useRef(null);
+
+            // (C) PROFESSIONAL POLISH: DOWNLOAD TEMPLATE
+            const downloadTemplate = () => {
+                const ws = XLSX.utils.json_to_sheet([
+                    { ID: "123", Name: "Student Name", Topic: "Topic Here", Point: "", Evidence: "", Explanation: "", Link: "" }
+                ]);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Students");
+                XLSX.writeFile(wb, "Argument_Template.xlsx");
+            };
 
             const handleFileChange = (e) => {
                 const file = e.target.files[0];
@@ -883,6 +900,12 @@
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
+                             <button
+                                onClick={downloadTemplate}
+                                className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-200 font-bold text-sm transition-colors"
+                            >
+                                <Icons.FilePlus size={16} /> Template
+                            </button>
                             <button
                                 onClick={onExport}
                                 className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg border border-green-200 hover:bg-green-100 font-bold text-sm transition-colors"
@@ -1068,18 +1091,45 @@
 
             const saveEvaluation = async (studentId, evaluation) => {
                 try {
+                    // (D) LOGIC CHANGE: UPDATE EXISTING EVALUATION INSTEAD OF APPENDING
                     if (status === 'ready') {
                         const studentRef = db.collection(DATA_COLLECTION).doc(String(studentId));
                         // Robust read-modify-write
                         const doc = await studentRef.get();
                         if (doc.exists) {
                             const sData = doc.data();
-                            const newEvaluations = [...(sData.evaluations || []), evaluation];
+                            const currentEvaluations = sData.evaluations || [];
+                            
+                            // Check if this evaluator has already rated this student
+                            const existingIndex = currentEvaluations.findIndex(e => e.evaluatorId === evaluation.evaluatorId);
+                            
+                            let newEvaluations;
+                            if (existingIndex >= 0) {
+                                // UPDATE: Replace existing
+                                newEvaluations = [...currentEvaluations];
+                                newEvaluations[existingIndex] = evaluation;
+                            } else {
+                                // INSERT: Append new
+                                newEvaluations = [...currentEvaluations, evaluation];
+                            }
+                            
                             await studentRef.update({ evaluations: newEvaluations });
                         }
                     } else {
                         const newData = localData.map(student => {
-                            if (student.id === studentId) return { ...student, evaluations: [...student.evaluations, evaluation] };
+                            if (student.id === studentId) {
+                                const currentEvaluations = student.evaluations || [];
+                                const existingIndex = currentEvaluations.findIndex(e => e.evaluatorId === evaluation.evaluatorId);
+                                
+                                let newEvaluations;
+                                if (existingIndex >= 0) {
+                                    newEvaluations = [...currentEvaluations];
+                                    newEvaluations[existingIndex] = evaluation;
+                                } else {
+                                    newEvaluations = [...currentEvaluations, evaluation];
+                                }
+                                return { ...student, evaluations: newEvaluations };
+                            }
                             return student;
                         });
                         setLocalData(newData);
