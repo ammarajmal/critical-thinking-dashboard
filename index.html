@@ -830,24 +830,94 @@
             </div>
         );
 
-        const AddArgumentForm = ({ onSave, initialData }) => {
+        const AddArgumentForm = ({ onSave, students, user, isAdmin, initialData }) => {
+            // 1. Determine who is the "target" student being edited
+            // If Admin: Use the 'initialData' passed when they clicked Edit in Admin Panel
+            // If Student: Look for their own profile in the 'students' array using their UID
+            const myProfile = React.useMemo(() => {
+                if (isAdmin) return initialData; // Admin edits whoever they selected
+                if (!user) return null;
+                return students.find(s => String(s.id) === String(user.uid));
+            }, [isAdmin, initialData, user, students]);
+
+            // 2. Check if the argument is locked (Has evaluations?)
+            const hasEvaluations = myProfile && myProfile.evaluations && myProfile.evaluations.length > 0;
+            const isLocked = !isAdmin && hasEvaluations;
+
+            // 3. Initialize Form Data
             const [formData, setFormData] = useState({
-                name: initialData?.name || '',
-                topic: initialData?.topic || '',
-                point: initialData?.peel?.point || '',
-                evidence: initialData?.peel?.evidence || '',
-                explanation: initialData?.peel?.explanation || '',
-                link: initialData?.peel?.link || ''
+                name: '',
+                topic: '',
+                point: '',
+                evidence: '',
+                explanation: '',
+                link: ''
             });
 
-            const handleSubmit = (e) => { e.preventDefault(); onSave(formData); };
+            // Load data when myProfile is found
+            useEffect(() => {
+                if (myProfile) {
+                    setFormData({
+                        name: myProfile.name || '',
+                        topic: myProfile.topic || '',
+                        point: myProfile.peel?.point || '',
+                        evidence: myProfile.peel?.evidence || '',
+                        explanation: myProfile.peel?.explanation || '',
+                        link: myProfile.peel?.link || ''
+                    });
+                } else if (user && !isAdmin) {
+                    // Pre-fill name/email for new users if possible
+                    setFormData(prev => ({ ...prev, name: user.displayName || user.email.split('@')[0] }));
+                }
+            }, [myProfile, user, isAdmin]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (isAdmin && hasEvaluations) {
+                    if (!confirm("WARNING: This student has existing evaluations.\n\nSaving changes will DELETE all current evaluations and require reviewers to re-evaluate.\n\nProceed?")) {
+                        return;
+                    }
+                }
+                onSave(formData, myProfile ? myProfile.id : null);
+            };
+
             const handleChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
 
+            // RENDER: LOCKED SCREEN (User View + Has Evaluations)
+            if (isLocked) {
+                return (
+                    <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center p-8 animate-fade-in">
+                        <div className="p-6 bg-amber-50 rounded-full mb-6">
+                            <Icons.Save size={48} className="text-amber-500" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-slate-800 mb-2">Argument Locked</h2>
+                        <p className="text-slate-500 max-w-md mb-8">
+                            Your argument has already been evaluated by your peers. 
+                            To preserve the integrity of their reviews, you cannot edit this argument anymore.
+                        </p>
+                        <div className="bg-slate-100 p-4 rounded-lg max-w-sm text-sm text-slate-600">
+                            <strong>Note:</strong> If you must change this, contact an Admin. 
+                            (Warning: This will delete all your current scores).
+                        </div>
+                    </div>
+                );
+            }
+
+            // RENDER: EDIT/CREATE FORM
             return (
                 <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8 border border-slate-100 animate-fade-in my-8">
                     <div className="flex items-center gap-3 mb-8 pb-6 border-b border-slate-100">
                         <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Icons.PenTool size={24} /></div>
-                        <div><h2 className="text-xl font-bold text-slate-800">{initialData ? 'Edit Argument' : 'Draft New Argument'}</h2></div>
+                        <div>
+                            <h2 className="text-xl font-bold text-slate-800">
+                                {myProfile ? 'Edit Your Argument' : 'Draft New Argument'}
+                            </h2>
+                            {isAdmin && hasEvaluations && (
+                                <span className="text-xs font-bold text-red-500 bg-red-50 px-2 py-1 rounded mt-1 inline-block">
+                                    ⚠️ Admin Mode: Saving will wipe evaluations
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid grid-cols-2 gap-4">
@@ -861,12 +931,49 @@
                             <InputField label="Link" value={formData.link} onChange={e => handleChange('link', e.target.value)} placeholder="Conclusion..." isArea />
                         </div>
                         <button type="submit" className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-all">
-                            {initialData ? 'Update Argument' : 'Publish Argument'}
+                            {myProfile ? 'Update Argument' : 'Publish Argument'}
                         </button>
                     </form>
                 </div>
             );
         };
+        // const AddArgumentForm = ({ onSave, initialData }) => {
+        //     const [formData, setFormData] = useState({
+        //         name: initialData?.name || '',
+        //         topic: initialData?.topic || '',
+        //         point: initialData?.peel?.point || '',
+        //         evidence: initialData?.peel?.evidence || '',
+        //         explanation: initialData?.peel?.explanation || '',
+        //         link: initialData?.peel?.link || ''
+        //     });
+
+        //     const handleSubmit = (e) => { e.preventDefault(); onSave(formData); };
+        //     const handleChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
+
+        //     return (
+        //         <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8 border border-slate-100 animate-fade-in my-8">
+        //             <div className="flex items-center gap-3 mb-8 pb-6 border-b border-slate-100">
+        //                 <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Icons.PenTool size={24} /></div>
+        //                 <div><h2 className="text-xl font-bold text-slate-800">{initialData ? 'Edit Argument' : 'Draft New Argument'}</h2></div>
+        //             </div>
+        //             <form onSubmit={handleSubmit} className="space-y-6">
+        //                 <div className="grid grid-cols-2 gap-4">
+        //                     <InputField label="Student Name" value={formData.name} onChange={e => handleChange('name', e.target.value)} placeholder="Name" />
+        //                     <InputField label="Topic" value={formData.topic} onChange={e => handleChange('topic', e.target.value)} placeholder="Topic" />
+        //                 </div>
+        //                 <div className="space-y-4 pt-4">
+        //                     <InputField label="Point" value={formData.point} onChange={e => handleChange('point', e.target.value)} placeholder="Main argument..." isArea />
+        //                     <InputField label="Evidence" value={formData.evidence} onChange={e => handleChange('evidence', e.target.value)} placeholder="Supporting evidence..." isArea />
+        //                     <InputField label="Explanation" value={formData.explanation} onChange={e => handleChange('explanation', e.target.value)} placeholder="Analysis..." isArea />
+        //                     <InputField label="Link" value={formData.link} onChange={e => handleChange('link', e.target.value)} placeholder="Conclusion..." isArea />
+        //                 </div>
+        //                 <button type="submit" className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-all">
+        //                     {initialData ? 'Update Argument' : 'Publish Argument'}
+        //                 </button>
+        //             </form>
+        //         </div>
+        //     );
+        // };
 
         const AdminPanel = ({ students, onReset, onDelete, onEdit, onImport, onExport }) => {
             const fileInputRef = useRef(null);
@@ -1075,12 +1182,22 @@
             const isAdmin = (status === 'offline') || (user && user.email && user.email.includes('admin')); // Simple Admin rule
 
             // Actions
-            const saveStudent = async (formData) => {
+            const saveStudent = async (formData, targetId) => {
                 try {
                     if (!user && status === 'ready') {
                         alert("You must be logged in to publish.");
                         return;
                     }
+
+                    // Determine the ID: 
+                    // If targetId is passed (from Admin edit or User update), use it.
+                    // Otherwise, default to current User UID (First time publish).
+                    const docId = targetId ? String(targetId) : user.uid;
+                    
+                    // Check if we need to wipe evaluations (Admin edited a locked student)
+                    // We check if the 'targetId' existed in our data and had evaluations
+                    const existingRecord = data.find(s => String(s.id) === docId);
+                    const shouldWipeEvaluations = isAdmin && existingRecord && existingRecord.evaluations.length > 0;
 
                     const newStudent = {
                         name: formData.name,
@@ -1091,37 +1208,33 @@
                             explanation: formData.explanation || "",
                             link: formData.link || ""
                         },
-                        // Preserve evaluations if editing, otherwise empty
-                        evaluations: editingStudent ? (editingStudent.evaluations || []) : []
+                        // KEY CHANGE: If Admin & Wiping, set to []. 
+                        // If regular edit (no evals existed anyway), keep [].
+                        // If Admin edit (but no evals existed), keep [].
+                        evaluations: shouldWipeEvaluations ? [] : (existingRecord ? existingRecord.evaluations : [])
                     };
 
                     if (status === 'ready') {
-                        if (editingStudent) {
-                            // Update existing doc
-                            await db.collection(DATA_COLLECTION).doc(String(editingStudent.id)).update(newStudent);
-                        } else {
-                            // CREATE NEW LINKED TO USER UID
-                            // We use the User UID as the Document ID. 
-                            // This ensures 1 user = 1 student profile logic.
-                            const newId = user.uid; 
-                            
-                            await db.collection(DATA_COLLECTION).doc(newId).set({ id: newId, ...newStudent });
-                            setSelectedId(newId);
-                        }
+                         // Firestore Update
+                         await db.collection(DATA_COLLECTION).doc(docId).set({ id: docId, ...newStudent });
+                         setSelectedId(docId);
                     } else {
-                        // LocalStorage Logic (Offline Fallback)
-                        if (editingStudent) {
-                            const newData = localData.map(s => s.id === editingStudent.id ? { ...s, ...newStudent } : s);
-                            setLocalData(newData);
-                            localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                        // LocalStorage Update
+                        let newData;
+                        if (existingRecord) {
+                            newData = localData.map(s => String(s.id) === docId ? { ...s, id: docId, ...newStudent } : s);
                         } else {
-                            const newId = localData.length > 0 ? Math.max(...localData.map(d => d.id)) + 1 : 1;
-                            const newData = [...localData, { id: newId, ...newStudent }];
-                            setLocalData(newData);
-                            localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
-                            setSelectedId(newId);
+                            newData = [...localData, { id: docId, ...newStudent }];
                         }
+                        setLocalData(newData);
+                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                        setSelectedId(docId);
                     }
+
+                    if (shouldWipeEvaluations) {
+                        alert("Argument updated. Previous evaluations have been reset.");
+                    }
+
                     setEditingStudent(null);
                     setView('dashboard');
                 } catch (e) {
@@ -1129,6 +1242,60 @@
                     console.error(e);
                 }
             };
+            // const saveStudent = async (formData) => {
+            //     try {
+            //         if (!user && status === 'ready') {
+            //             alert("You must be logged in to publish.");
+            //             return;
+            //         }
+
+            //         const newStudent = {
+            //             name: formData.name,
+            //             topic: formData.topic,
+            //             peel: {
+            //                 point: formData.point || "",
+            //                 evidence: formData.evidence || "",
+            //                 explanation: formData.explanation || "",
+            //                 link: formData.link || ""
+            //             },
+            //             // Preserve evaluations if editing, otherwise empty
+            //             evaluations: editingStudent ? (editingStudent.evaluations || []) : []
+            //         };
+
+            //         if (status === 'ready') {
+            //             if (editingStudent) {
+            //                 // Update existing doc
+            //                 await db.collection(DATA_COLLECTION).doc(String(editingStudent.id)).update(newStudent);
+            //             } else {
+            //                 // CREATE NEW LINKED TO USER UID
+            //                 // We use the User UID as the Document ID. 
+            //                 // This ensures 1 user = 1 student profile logic.
+            //                 const newId = user.uid; 
+                            
+            //                 await db.collection(DATA_COLLECTION).doc(newId).set({ id: newId, ...newStudent });
+            //                 setSelectedId(newId);
+            //             }
+            //         } else {
+            //             // LocalStorage Logic (Offline Fallback)
+            //             if (editingStudent) {
+            //                 const newData = localData.map(s => s.id === editingStudent.id ? { ...s, ...newStudent } : s);
+            //                 setLocalData(newData);
+            //                 localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+            //             } else {
+            //                 const newId = localData.length > 0 ? Math.max(...localData.map(d => d.id)) + 1 : 1;
+            //                 const newData = [...localData, { id: newId, ...newStudent }];
+            //                 setLocalData(newData);
+            //                 localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+            //                 setSelectedId(newId);
+            //             }
+            //         }
+            //         setEditingStudent(null);
+            //         setView('dashboard');
+            //     } catch (e) {
+            //         alert("Error Saving Data: " + e.message);
+            //         console.error(e);
+            //     }
+            // };
             // const saveStudent = async (formData) => {
             //     try {
             //         const newStudent = {
@@ -1286,7 +1453,15 @@
                                     </div>
                                 </div>
                             )}
-                            {view === 'add' && <AddArgumentForm onSave={saveStudent} initialData={editingStudent} />}
+                            {view === 'add' && (
+                                <AddArgumentForm 
+                                    onSave={saveStudent} 
+                                    students={data}      // Pass all students to find "myProfile"
+                                    user={user}          // Pass current user to match ID
+                                    isAdmin={isAdmin}    // Pass admin status for override logic
+                                    initialData={editingStudent} // Pass data if Admin clicked "Edit"
+                                />
+                            )}
                             {view === 'evaluate' && <EvaluateForm students={data} onSave={saveEvaluation} currentUser={user} onViewChange={setView} />}
                             {view === 'admin' && isAdmin && (
                                 <AdminPanel
