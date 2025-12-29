@@ -515,31 +515,55 @@
                 </div>
             );
         };
-
-        const EvaluateForm = ({ students, onSave, currentUser }) => {
+        const EvaluateForm = ({ students, onSave, currentUser, onViewChange }) => {
             const [selectedId, setSelectedId] = useState(students[0]?.id);
-            // Evaluator is forced to the logged‑in user – no dropdown selection allowed
-            const [evaluatorId, setEvaluatorId] = useState(currentUser?.uid || '');
             const [scores, setScores] = useState({ point: 15, evidence: 15, explanation: 15, link: 15, logic: 5, clarity: 5, fairness: 5 });
             const [comments, setComments] = useState({ point: '', evidence: '', explanation: '', link: '' });
-            // Keep evaluatorId in sync if user changes (e.g., sign‑out/in)
-            useEffect(() => {
-                setEvaluatorId(currentUser?.uid || '');
-            }, [currentUser]);
 
+            // 1. DETERMINE IF CURRENT USER HAS SUBMITTED AN ARGUMENT
+            // We look for a student record where the ID matches the logged-in User's UID
+            const myProfile = useMemo(() => {
+                if (!currentUser) return null;
+                return students.find(s => String(s.id) === String(currentUser.uid));
+            }, [currentUser, students]);
 
-            // The list of evaluators is no longer needed – we only allow the current user
-            const studentToEvaluate = students.find(s => s.id === Number(selectedId)) || students[0];
+            const studentToEvaluate = students.find(s => s.id === Number(selectedId) || String(s.id) === String(selectedId)) || students[0];
 
-            useEffect(() => {
-                if (Number(evaluatorId) === Number(selectedId)) setEvaluatorId('');
-            }, [selectedId, evaluatorId]);
+            // 2. BLOCK ACCESS IF NO PROFILE FOUND
+            if (!myProfile) {
+                return (
+                    <div className="flex flex-col items-center justify-center h-full min-h-[500px] text-center p-8 animate-fade-in">
+                        <div className="p-6 bg-slate-100 rounded-full mb-6">
+                            <Icons.PenTool size={48} className="text-slate-400" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-slate-800 mb-2">Evaluation Locked</h2>
+                        <p className="text-slate-500 max-w-md mb-8">
+                            To ensure fairness, you must submit your own argument before you can evaluate others.
+                            Once you publish your draft, your name ({currentUser?.email}) will be permanently linked to your evaluations.
+                        </p>
+                        <button 
+                            onClick={() => onViewChange('add')}
+                            className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2"
+                        >
+                            <Icons.PenTool size={18} />
+                            Go to Draft Page
+                        </button>
+                    </div>
+                );
+            }
 
             const handleSubmit = (e) => {
                 e.preventDefault();
                 if (!currentUser) { alert('User not logged in'); return; }
+                
+                // Prevent self-evaluation
+                if (String(selectedId) === String(currentUser.uid)) {
+                    alert("You cannot evaluate your own argument.");
+                    return;
+                }
+
                 const evaluatorId = currentUser.uid;
-                const evaluatorName = currentUser.email;
+                const evaluatorName = myProfile.name; // Use the name from their saved profile
 
                 onSave(selectedId, {
                     evaluatorId,
@@ -550,9 +574,9 @@
                 });
             };
 
+            // Helper for rendering rows (Same as before)
             const EvaluationRow = ({ sectionTitle, sectionContent, scoreKey, score, comment, color }) => (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 border border-slate-200 rounded-xl overflow-hidden shadow-sm mb-6 bg-white">
-                    {/* Left: 1/3 Controls */}
                     <div className="col-span-1 p-6 bg-slate-50 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col justify-between">
                         <div>
                             <div className="flex justify-between items-center mb-4">
@@ -582,7 +606,6 @@
                             ></textarea>
                         </div>
                     </div>
-                    {/* Right: 2/3 Content */}
                     <div className="col-span-1 lg:col-span-2 p-6 bg-white overflow-y-auto max-h-[300px]">
                         <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Review {sectionTitle}</h5>
                         <p className="font-serif text-slate-800 leading-relaxed text-[15px] whitespace-pre-wrap">{sectionContent}</p>
@@ -603,46 +626,198 @@
                                 <select
                                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                                     value={selectedId}
-                                    onChange={e => setSelectedId(Number(e.target.value))}
+                                    onChange={e => setSelectedId(e.target.value)}
                                 >
-                                    {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    {students
+                                        .filter(s => String(s.id) !== String(currentUser.uid)) // Hide self from dropdown
+                                        .map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                                    }
                                 </select>
                             </div>
                             <div className="flex flex-col gap-1 w-48">
                                 <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Evaluated By</label>
                                 <input
                                     type="text"
-                                    className="w-full p-2.5 bg-gray-100 border border-slate-300 rounded-lg text-sm font-medium outline-none"
-                                    value={currentUser?.email || ''}
+                                    className="w-full p-2.5 bg-gray-100 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 outline-none cursor-not-allowed"
+                                    value={myProfile.name} // LOCKED TO USER NAME
                                     readOnly
+                                    title="This is locked to the name you submitted in your Draft."
                                 />
                             </div>
                         </div>
                     </header>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <EvaluationRow sectionTitle="Point" sectionContent={studentToEvaluate.peel.point} scoreKey="point" score={scores.point} comment={comments.point} color={{ text: 'text-blue-600', bg: 'bg-blue-600' }} />
-                        <EvaluationRow sectionTitle="Evidence" sectionContent={studentToEvaluate.peel.evidence} scoreKey="evidence" score={scores.evidence} comment={comments.evidence} color={{ text: 'text-green-600', bg: 'bg-green-600' }} />
-                        <EvaluationRow sectionTitle="Explanation" sectionContent={studentToEvaluate.peel.explanation} scoreKey="explanation" score={scores.explanation} comment={comments.explanation} color={{ text: 'text-amber-600', bg: 'bg-amber-600' }} />
-                        <EvaluationRow sectionTitle="Link" sectionContent={studentToEvaluate.peel.link} scoreKey="link" score={scores.link} comment={comments.link} color={{ text: 'text-purple-600', bg: 'bg-purple-600' }} />
-
-                        <div className="fixed bottom-0 right-0 w-full md:w-[calc(100%-18rem)] bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 flex justify-end items-center gap-4 z-30">
-                            <div className="text-right mr-4 hidden md:block">
-                                <div className="text-xs text-slate-500 font-bold uppercase">Total Score</div>
-                                <div className="text-2xl font-bold text-slate-900">
-                                    {(Number(scores.point) + Number(scores.evidence) + Number(scores.explanation) + Number(scores.link)).toFixed(1).replace(/\.0$/, '')}
-                                    <span className="text-sm text-slate-400 font-medium">/100</span>
-                                </div>
-                            </div>
-                            <button type="submit" className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transform hover:-translate-y-0.5 transition-all flex items-center gap-2">
-                                <Icons.CheckCircle size={18} />
-                                Submit Evaluation
-                            </button>
-                        </div>
+                        {studentToEvaluate ? (
+                           <>
+                             <EvaluationRow sectionTitle="Point" sectionContent={studentToEvaluate.peel.point} scoreKey="point" score={scores.point} comment={comments.point} color={{ text: 'text-blue-600', bg: 'bg-blue-600' }} />
+                             <EvaluationRow sectionTitle="Evidence" sectionContent={studentToEvaluate.peel.evidence} scoreKey="evidence" score={scores.evidence} comment={comments.evidence} color={{ text: 'text-green-600', bg: 'bg-green-600' }} />
+                             <EvaluationRow sectionTitle="Explanation" sectionContent={studentToEvaluate.peel.explanation} scoreKey="explanation" score={scores.explanation} comment={comments.explanation} color={{ text: 'text-amber-600', bg: 'bg-amber-600' }} />
+                             <EvaluationRow sectionTitle="Link" sectionContent={studentToEvaluate.peel.link} scoreKey="link" score={scores.link} comment={comments.link} color={{ text: 'text-purple-600', bg: 'bg-purple-600' }} />
+                             
+                             <div className="fixed bottom-0 right-0 w-full md:w-[calc(100%-18rem)] bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 flex justify-end items-center gap-4 z-30">
+                                 <div className="text-right mr-4 hidden md:block">
+                                     <div className="text-xs text-slate-500 font-bold uppercase">Total Score</div>
+                                     <div className="text-2xl font-bold text-slate-900">
+                                         {(Number(scores.point) + Number(scores.evidence) + Number(scores.explanation) + Number(scores.link)).toFixed(1).replace(/\.0$/, '')}
+                                         <span className="text-sm text-slate-400 font-medium">/100</span>
+                                     </div>
+                                 </div>
+                                 <button type="submit" className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transform hover:-translate-y-0.5 transition-all flex items-center gap-2">
+                                     <Icons.CheckCircle size={18} />
+                                     Submit Evaluation
+                                 </button>
+                             </div>
+                           </>
+                        ) : (
+                           <div className="p-8 text-center text-slate-400 italic border-2 border-dashed border-slate-200 rounded-xl">
+                              Select a student to evaluate.
+                           </div>
+                        )}
                     </form>
                 </div>
             );
         };
+        // const EvaluateForm = ({ students, onSave, currentUser }) => {
+        //     const [selectedId, setSelectedId] = useState(students[0]?.id);
+        //     // Evaluator is forced to the logged‑in user – no dropdown selection allowed
+        //     const [evaluatorId, setEvaluatorId] = useState(currentUser?.uid || '');
+        //     const [scores, setScores] = useState({ point: 15, evidence: 15, explanation: 15, link: 15, logic: 5, clarity: 5, fairness: 5 });
+        //     const [comments, setComments] = useState({ point: '', evidence: '', explanation: '', link: '' });
+        //     // Keep evaluatorId in sync if user changes (e.g., sign‑out/in)
+        //     useEffect(() => {
+        //         setEvaluatorId(currentUser?.uid || '');
+        //     }, [currentUser]);
+
+        //     // New state for evaluator's display name (student name)
+        //     const [evaluatorDisplayName, setEvaluatorDisplayName] = useState('');
+        //     // Sync evaluator name with current user and students list
+        //     useEffect(() => {
+        //         if (currentUser) {
+        //             const nameFromStudent = students.find(s => String(s.id) === String(currentUser.uid))?.name;
+        //             const fallback = currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : '');
+        //             setEvaluatorDisplayName(nameFromStudent || fallback);
+        //         } else {
+        //             setEvaluatorDisplayName('');
+        //         }
+        //     }, [currentUser, students]);
+
+
+        //     // The list of evaluators is no longer needed – we only allow the current user
+        //     const studentToEvaluate = students.find(s => s.id === Number(selectedId)) || students[0];
+
+        //     useEffect(() => {
+        //         if (Number(evaluatorId) === Number(selectedId)) setEvaluatorId('');
+        //     }, [selectedId, evaluatorId]);
+
+        //     const handleSubmit = (e) => {
+        //         e.preventDefault();
+        //         if (!currentUser) { alert('User not logged in'); return; }
+        //         const evaluatorId = currentUser.uid;
+        //         const evaluatorName = evaluatorDisplayName;
+
+        //         onSave(selectedId, {
+        //             evaluatorId,
+        //             evaluatorName,
+        //             peel: { point: Number(scores.point), evidence: Number(scores.evidence), explanation: Number(scores.explanation), link: Number(scores.link) },
+        //             comments: comments,
+        //             secondary: { logic: Number(scores.logic), clarity: Number(scores.clarity), fairness: Number(scores.fairness) }
+        //         });
+        //     };
+
+        //     const EvaluationRow = ({ sectionTitle, sectionContent, scoreKey, score, comment, color }) => (
+        //         <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 border border-slate-200 rounded-xl overflow-hidden shadow-sm mb-6 bg-white">
+        //             {/* Left: 1/3 Controls */}
+        //             <div className="col-span-1 p-6 bg-slate-50 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col justify-between">
+        //                 <div>
+        //                     <div className="flex justify-between items-center mb-4">
+        //                         <h4 className={`text-sm font-bold uppercase tracking-wider ${color.text} flex items-center gap-2`}>
+        //                             <div className={`w-2 h-2 rounded-full ${color.bg}`}></div>
+        //                             Review {sectionTitle}
+        //                         </h4>
+        //                         <div className="flex items-center gap-2">
+        //                             <input
+        //                                 type="number" min="0" max="25" step="0.5" value={score}
+        //                                 onChange={e => setScores({ ...scores, [scoreKey]: Math.min(25, Math.max(0, e.target.value)) })}
+        //                                 className="w-16 p-1 text-center font-bold text-slate-800 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+        //                             />
+        //                             <span className="text-xs text-slate-400 font-bold">/ 25</span>
+        //                         </div>
+        //                     </div>
+        //                     <input
+        //                         type="range" min="0" max="25" step="0.5" value={score}
+        //                         onChange={e => setScores({ ...scores, [scoreKey]: Number(e.target.value) })}
+        //                         className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer mb-5 accent-blue-600"
+        //                     />
+        //                     <textarea
+        //                         placeholder={`Remarks for ${sectionTitle}...`}
+        //                         className="w-full text-xs p-3 bg-white border border-slate-200 rounded-lg resize-none h-24 focus:border-blue-400 outline-none transition-all"
+        //                         value={comment}
+        //                         onChange={e => setComments({ ...comments, [scoreKey]: e.target.value })}
+        //                     ></textarea>
+        //                 </div>
+        //             </div>
+        //             {/* Right: 2/3 Content */}
+        //             <div className="col-span-1 lg:col-span-2 p-6 bg-white overflow-y-auto max-h-[300px]">
+        //                 <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Review {sectionTitle}</h5>
+        //                 <p className="font-serif text-slate-800 leading-relaxed text-[15px] whitespace-pre-wrap">{sectionContent}</p>
+        //             </div>
+        //         </div>
+        //     );
+
+        //     return (
+        //         <div className="max-w-7xl mx-auto p-2 animate-fade-in pb-20">
+        //             <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-gray-200 pb-6">
+        //                 <div>
+        //                     <h2 className="text-2xl font-bold text-slate-900">Evaluation Mode</h2>
+        //                     <p className="text-slate-500">Review student arguments side-by-side with scoring.</p>
+        //                 </div>
+        //                 <div className="flex gap-4 items-end">
+        //                     <div className="flex flex-col gap-1 w-48">
+        //                         <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Evaluate Student</label>
+        //                         <select
+        //                             className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+        //                             value={selectedId}
+        //                             onChange={e => setSelectedId(Number(e.target.value))}
+        //                         >
+        //                             {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        //                         </select>
+        //                     </div>
+        //                     <div className="flex flex-col gap-1 w-48">
+        //                         <label className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Evaluated By</label>
+        //                         <input
+        //                             type="text"
+        //                             className="w-full p-2.5 bg-gray-100 border border-slate-300 rounded-lg text-sm font-medium outline-none"
+        //                             value={evaluatorDisplayName || ''}
+        //                             readOnly
+        //                         />
+        //                     </div>
+        //                 </div>
+        //             </header>
+
+        //             <form onSubmit={handleSubmit} className="space-y-4">
+        //                 <EvaluationRow sectionTitle="Point" sectionContent={studentToEvaluate.peel.point} scoreKey="point" score={scores.point} comment={comments.point} color={{ text: 'text-blue-600', bg: 'bg-blue-600' }} />
+        //                 <EvaluationRow sectionTitle="Evidence" sectionContent={studentToEvaluate.peel.evidence} scoreKey="evidence" score={scores.evidence} comment={comments.evidence} color={{ text: 'text-green-600', bg: 'bg-green-600' }} />
+        //                 <EvaluationRow sectionTitle="Explanation" sectionContent={studentToEvaluate.peel.explanation} scoreKey="explanation" score={scores.explanation} comment={comments.explanation} color={{ text: 'text-amber-600', bg: 'bg-amber-600' }} />
+        //                 <EvaluationRow sectionTitle="Link" sectionContent={studentToEvaluate.peel.link} scoreKey="link" score={scores.link} comment={comments.link} color={{ text: 'text-purple-600', bg: 'bg-purple-600' }} />
+
+        //                 <div className="fixed bottom-0 right-0 w-full md:w-[calc(100%-18rem)] bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 flex justify-end items-center gap-4 z-30">
+        //                     <div className="text-right mr-4 hidden md:block">
+        //                         <div className="text-xs text-slate-500 font-bold uppercase">Total Score</div>
+        //                         <div className="text-2xl font-bold text-slate-900">
+        //                             {(Number(scores.point) + Number(scores.evidence) + Number(scores.explanation) + Number(scores.link)).toFixed(1).replace(/\.0$/, '')}
+        //                             <span className="text-sm text-slate-400 font-medium">/100</span>
+        //                         </div>
+        //                     </div>
+        //                     <button type="submit" className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transform hover:-translate-y-0.5 transition-all flex items-center gap-2">
+        //                         <Icons.CheckCircle size={18} />
+        //                         Submit Evaluation
+        //                     </button>
+        //                 </div>
+        //             </form>
+        //         </div>
+        //     );
+        // };
 
         const InputField = ({ label, value, onChange, placeholder, isArea }) => (
             <div className="flex flex-col gap-1.5">
@@ -902,6 +1077,11 @@
             // Actions
             const saveStudent = async (formData) => {
                 try {
+                    if (!user && status === 'ready') {
+                        alert("You must be logged in to publish.");
+                        return;
+                    }
+
                     const newStudent = {
                         name: formData.name,
                         topic: formData.topic,
@@ -911,19 +1091,25 @@
                             explanation: formData.explanation || "",
                             link: formData.link || ""
                         },
+                        // Preserve evaluations if editing, otherwise empty
                         evaluations: editingStudent ? (editingStudent.evaluations || []) : []
                     };
 
                     if (status === 'ready') {
                         if (editingStudent) {
+                            // Update existing doc
                             await db.collection(DATA_COLLECTION).doc(String(editingStudent.id)).update(newStudent);
                         } else {
-                            const newId = String(Date.now());
+                            // CREATE NEW LINKED TO USER UID
+                            // We use the User UID as the Document ID. 
+                            // This ensures 1 user = 1 student profile logic.
+                            const newId = user.uid; 
+                            
                             await db.collection(DATA_COLLECTION).doc(newId).set({ id: newId, ...newStudent });
                             setSelectedId(newId);
                         }
                     } else {
-                        // LocalStorage Logic
+                        // LocalStorage Logic (Offline Fallback)
                         if (editingStudent) {
                             const newData = localData.map(s => s.id === editingStudent.id ? { ...s, ...newStudent } : s);
                             setLocalData(newData);
@@ -939,10 +1125,53 @@
                     setEditingStudent(null);
                     setView('dashboard');
                 } catch (e) {
-                    alert("Error Saving Data: " + e.message + "\n\n(Hint: Did you create the Firestore Database in the Console?)");
+                    alert("Error Saving Data: " + e.message);
                     console.error(e);
                 }
             };
+            // const saveStudent = async (formData) => {
+            //     try {
+            //         const newStudent = {
+            //             name: formData.name,
+            //             topic: formData.topic,
+            //             peel: {
+            //                 point: formData.point || "",
+            //                 evidence: formData.evidence || "",
+            //                 explanation: formData.explanation || "",
+            //                 link: formData.link || ""
+            //             },
+            //             evaluations: editingStudent ? (editingStudent.evaluations || []) : []
+            //         };
+
+            //         if (status === 'ready') {
+            //             if (editingStudent) {
+            //                 await db.collection(DATA_COLLECTION).doc(String(editingStudent.id)).update(newStudent);
+            //             } else {
+            //                 const newId = String(Date.now());
+            //                 await db.collection(DATA_COLLECTION).doc(newId).set({ id: newId, ...newStudent });
+            //                 setSelectedId(newId);
+            //             }
+            //         } else {
+            //             // LocalStorage Logic
+            //             if (editingStudent) {
+            //                 const newData = localData.map(s => s.id === editingStudent.id ? { ...s, ...newStudent } : s);
+            //                 setLocalData(newData);
+            //                 localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+            //             } else {
+            //                 const newId = localData.length > 0 ? Math.max(...localData.map(d => d.id)) + 1 : 1;
+            //                 const newData = [...localData, { id: newId, ...newStudent }];
+            //                 setLocalData(newData);
+            //                 localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+            //                 setSelectedId(newId);
+            //             }
+            //         }
+            //         setEditingStudent(null);
+            //         setView('dashboard');
+            //     } catch (e) {
+            //         alert("Error Saving Data: " + e.message + "\n\n(Hint: Did you create the Firestore Database in the Console?)");
+            //         console.error(e);
+            //     }
+            // };
 
             const saveEvaluation = async (studentId, evaluation) => {
                 try {
@@ -1058,7 +1287,7 @@
                                 </div>
                             )}
                             {view === 'add' && <AddArgumentForm onSave={saveStudent} initialData={editingStudent} />}
-                            {view === 'evaluate' && <EvaluateForm students={data} onSave={saveEvaluation} currentUser={user} />}
+                            {view === 'evaluate' && <EvaluateForm students={data} onSave={saveEvaluation} currentUser={user} onViewChange={setView} />}
                             {view === 'admin' && isAdmin && (
                                 <AdminPanel
                                     students={data}
