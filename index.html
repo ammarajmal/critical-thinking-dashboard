@@ -880,46 +880,36 @@
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                setIsSubmitting(true); // Disable button
-                
+                setIsSubmitting(true);
+
+                // If the author's profile already has evaluations and they're not an admin,
+                // confirm and create a preserved revision (archive current peel + evaluations).
+                if (!isAdmin && hasEvaluations) {
+                    if (!confirm("This will archive your current argument and its feedback as a previous version. The new version will be saved and opened for new evaluations. Proceed?")) {
+                        setIsSubmitting(false);
+                        return;
+                    }
+                    await onSave(formData, myProfile ? myProfile.id : null, true);
+                    return;
+                }
+
+                // Admins keep legacy behavior: optionally wipe evaluations on save
                 if (isAdmin && hasEvaluations) {
                     if (!confirm("WARNING: This student has existing evaluations.\n\nSaving changes will DELETE all current evaluations and require reviewers to re-evaluate.\n\nProceed?")) {
                         setIsSubmitting(false);
                         return;
                     }
+                    await onSave(formData, myProfile ? myProfile.id : null, false, true);
+                    return;
                 }
-                await onSave(formData, myProfile ? myProfile.id : null);
-                // No need to set false here as component likely unmounts, but if not:
-                // setIsSubmitting(false); 
+
+                await onSave(formData, myProfile ? myProfile.id : null, false);
             };
 
             const handleChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
 
-            // RENDER: LOCKED SCREEN (User View + Has Evaluations)
-            if (isLocked) {
-                return (
-                    <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center p-8 animate-fade-in">
-                        <div className="p-6 bg-amber-50 rounded-full mb-6">
-                            <Icons.Save size={48} className="text-amber-500" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-slate-800 mb-2">Argument Locked</h2>
-                        <p className="text-slate-500 max-w-md mb-8">
-                            Your argument has already been evaluated by your peers. 
-                            To preserve the integrity of their reviews, you cannot edit this argument anymore.
-                        </p>
-                        <div className="flex flex-col gap-3 w-full max-w-xs">
-                            <button 
-                                onClick={() => onRevise(myProfile.id)}
-                                className="w-full py-3 bg-white border-2 border-slate-900 text-slate-900 font-bold rounded-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Icons.RefreshCw size={18} />
-                                Create Revised Version
-                            </button>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-4">This will archive current evaluations and reset your score.</p>
-                    </div>
-                );
-            }
+            // NOTE: Removed the hard lock UI. Users can now revise published arguments; if they do,
+            // a preserved version with the previous peel + evaluations will be created automatically.
 
             // RENDER: EDIT/CREATE FORM
             return (
@@ -1290,24 +1280,18 @@
             const isAdmin = (status === 'offline') || (user && user.email && user.email.includes('admin')); // Simple Admin rule
 
             // Actions
-            const saveStudent = async (formData, targetId) => {
+            const saveStudent = async (formData, targetId, createVersion = false, adminWipe = false) => {
                 try {
                     if (!user && status === 'ready') {
                         alert("You must be logged in to publish.");
                         return;
                     }
 
-                    // Determine the ID: 
-                    // If targetId is passed (from Admin edit or User update), use it.
-                    // Otherwise, default to current User UID (First time publish).
+                    // Determine the ID: use targetId if provided, otherwise current user UID
                     const docId = targetId ? String(targetId) : user.uid;
-                    
-                    // Check if we need to wipe evaluations (Admin edited a locked student)
-                    // We check if the 'targetId' existed in our data and had evaluations
                     const existingRecord = data.find(s => String(s.id) === docId);
-                    const shouldWipeEvaluations = isAdmin && existingRecord && existingRecord.evaluations.length > 0;
 
-                    const newStudent = {
+                    const baseStudent = {
                         name: formData.name,
                         topic: formData.topic,
                         peel: {
@@ -1315,17 +1299,40 @@
                             evidence: formData.evidence || "",
                             explanation: formData.explanation || "",
                             link: formData.link || ""
-                        },
-                        // KEY CHANGE: If Admin & Wiping, set to []. 
-                        // If regular edit (no evals existed anyway), keep [].
-                        // If Admin edit (but no evals existed), keep [].
-                        evaluations: shouldWipeEvaluations ? [] : (existingRecord ? existingRecord.evaluations : [])
+                        }
                     };
 
+                    let newStudent;
+
+                    if (existingRecord) {
+                        const priorVersions = existingRecord.versions || [];
+
+                        if (createVersion) {
+                            // Archive current state as a new version and reset evaluations
+                            const archive = {
+                                timestamp: new Date().toISOString(),
+                                peel: existingRecord.peel,
+                                evaluations: existingRecord.evaluations || [],
+                                version: (priorVersions.length || 0) + 1
+                            };
+                            const versions = [...priorVersions, archive];
+                            newStudent = { ...baseStudent, evaluations: [], versions };
+                        } else if (adminWipe) {
+                            // Admin chose to wipe existing evaluations
+                            newStudent = { ...baseStudent, evaluations: [], versions: priorVersions };
+                        } else {
+                            // Normal update that preserves existing evaluations & versions
+                            newStudent = { ...baseStudent, evaluations: existingRecord.evaluations || [], versions: priorVersions };
+                        }
+                    } else {
+                        // New record
+                        newStudent = { ...baseStudent, evaluations: [], versions: [] };
+                    }
+
                     if (status === 'ready') {
-                         // Firestore Update
-                         await db.collection(DATA_COLLECTION).doc(docId).set({ id: docId, ...newStudent });
-                         setSelectedId(docId);
+                        // Firestore Update
+                        await db.collection(DATA_COLLECTION).doc(docId).set({ id: docId, ...newStudent });
+                        setSelectedId(docId);
                     } else {
                         // LocalStorage Update
                         let newData;
@@ -1339,7 +1346,10 @@
                         setSelectedId(docId);
                     }
 
-                    if (shouldWipeEvaluations) {
+                    if (createVersion) {
+                        alert("Revision saved. Previous version archived and preserved for reference.");
+                    }
+                    if (adminWipe) {
                         alert("Argument updated. Previous evaluations have been reset.");
                     }
 
