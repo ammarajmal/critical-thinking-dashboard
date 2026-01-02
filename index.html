@@ -111,6 +111,7 @@
             Download: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>} />,
             Upload: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></>} />,
             FilePlus: (props) => <Icon {...props} path={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" /></>} />,
+            RefreshCw: (props) => <Icon {...props} path={<><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></>} />,
         };
 
         // ----------------------------------------------------
@@ -413,10 +414,85 @@
             </div>
         );
 
-        const EvaluationDashboard = ({ student }) => {
+        const CommentSection = ({ label, color, comment, threads, onSend, userRole, sectionKey }) => {
+            const [isReplying, setIsReplying] = useState(false);
+            const [replyText, setReplyText] = useState('');
+
+            return (
+                <div className="text-xs leading-relaxed group/item mb-4">
+                    <div className="mb-2">
+                        <span className={`font-bold ${color} uppercase mr-1 text-[10px]`}>{label}:</span>
+                        <span className="text-slate-600">{comment}</span>
+                    </div>
+                    
+                    {/* Thread Display */}
+                    <div className="space-y-2 pl-3 border-l-2 border-slate-100 ml-1">
+                        {threads && threads.map((msg, idx) => (
+                            <div key={idx} className={`flex flex-col ${msg.role === 'author' ? 'items-end' : 'items-start'}`}>
+                                <div className={`px-3 py-2 rounded-lg max-w-[90%] ${
+                                    msg.role === 'author' 
+                                        ? 'bg-blue-50 text-blue-900 rounded-tr-none' 
+                                        : 'bg-slate-100 text-slate-800 rounded-tl-none'
+                                }`}>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-bold text-[9px] uppercase opacity-60">{msg.role}</span>
+                                        <span className="text-[8px] opacity-40">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                    </div>
+                                    <div>{msg.text}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Reply Action */}
+                    {(userRole === 'author' || userRole === 'evaluator') && !isReplying && (
+                        <button onClick={() => setIsReplying(true)} className="mt-2 ml-4 text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
+                            <Icons.Edit size={10} /> Reply to thread
+                        </button>
+                    )}
+
+                    {/* Reply Input */}
+                    {isReplying && (
+                        <div className="mt-2 ml-4 animate-fade-in mb-2">
+                            <textarea className="w-full p-2 bg-white border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none" rows="2" placeholder="Write your reply..." value={replyText} onChange={(e) => setReplyText(e.target.value)}></textarea>
+                            <div className="flex justify-end gap-2 mt-1">
+                                <button onClick={() => setIsReplying(false)} className="text-[10px] font-bold text-slate-500 hover:text-slate-700">Cancel</button>
+                                <button onClick={() => {
+                                    if (replyText.trim()) {
+                                        onSend(sectionKey, replyText);
+                                        setReplyText('');
+                                        setIsReplying(false);
+                                    }
+                                }} className="text-[10px] font-bold bg-slate-900 text-white px-2 py-1 rounded hover:bg-slate-700">Send</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const EvaluationDashboard = ({ student, currentUser, onSendChat }) => {
             const [showSecondary, setShowSecondary] = useState(false);
             const [showComments, setShowComments] = useState(false);
             const stats = useMemo(() => calculateStats(student.evaluations), [student]);
+            
+            // Determine User Role for Chat
+            const getUserRole = (evaluatorId) => {
+                if (!currentUser) return null;
+                if (String(currentUser.uid) === String(student.id)) return 'author';
+                if (String(currentUser.uid) === String(evaluatorId)) return 'evaluator';
+                return null;
+            };
+
+            // Helper to merge legacy replies into threads
+            const getThreads = (ev, section) => {
+                const threads = ev.threads?.[section] || [];
+                // If legacy reply exists and not in threads, prepend it (migration on read)
+                if (ev.replies?.[section] && !threads.some(t => t.text === ev.replies[section])) {
+                    return [{ role: 'author', text: ev.replies[section], timestamp: new Date().toISOString() }, ...threads];
+                }
+                return threads;
+            };
 
             return (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-xl shadow-slate-200/50 p-6 sticky top-6 animate-fade-in w-full">
@@ -524,30 +600,10 @@
                                             </span>
                                         </div>
                                         <div className="space-y-3">
-                                            {ev.comments.point && (
-                                                <div className="text-xs leading-relaxed">
-                                                    <span className="font-bold text-blue-600 uppercase mr-1 text-[10px]">Point:</span>
-                                                    <span className="text-slate-600">{ev.comments.point}</span>
-                                                </div>
-                                            )}
-                                            {ev.comments.evidence && (
-                                                <div className="text-xs leading-relaxed">
-                                                    <span className="font-bold text-green-600 uppercase mr-1 text-[10px]">Evidence:</span>
-                                                    <span className="text-slate-600">{ev.comments.evidence}</span>
-                                                </div>
-                                            )}
-                                            {ev.comments.explanation && (
-                                                <div className="text-xs leading-relaxed">
-                                                    <span className="font-bold text-amber-600 uppercase mr-1 text-[10px]">Explanation:</span>
-                                                    <span className="text-slate-600">{ev.comments.explanation}</span>
-                                                </div>
-                                            )}
-                                            {ev.comments.link && (
-                                                <div className="text-xs leading-relaxed">
-                                                    <span className="font-bold text-purple-600 uppercase mr-1 text-[10px]">Link:</span>
-                                                    <span className="text-slate-600">{ev.comments.link}</span>
-                                                </div>
-                                            )}
+                                            {ev.comments.point && <CommentSection label="Point" color="text-blue-600" comment={ev.comments.point} threads={getThreads(ev, 'point')} userRole={!student.isHistory ? getUserRole(ev.evaluatorId) : null} sectionKey="point" onSend={(s, t) => onSendChat(student.id, ev.evaluatorId, s, t, getUserRole(ev.evaluatorId))} />}
+                                            {ev.comments.evidence && <CommentSection label="Evidence" color="text-green-600" comment={ev.comments.evidence} threads={getThreads(ev, 'evidence')} userRole={!student.isHistory ? getUserRole(ev.evaluatorId) : null} sectionKey="evidence" onSend={(s, t) => onSendChat(student.id, ev.evaluatorId, s, t, getUserRole(ev.evaluatorId))} />}
+                                            {ev.comments.explanation && <CommentSection label="Explanation" color="text-amber-600" comment={ev.comments.explanation} threads={getThreads(ev, 'explanation')} userRole={!student.isHistory ? getUserRole(ev.evaluatorId) : null} sectionKey="explanation" onSend={(s, t) => onSendChat(student.id, ev.evaluatorId, s, t, getUserRole(ev.evaluatorId))} />}
+                                            {ev.comments.link && <CommentSection label="Link" color="text-purple-600" comment={ev.comments.link} threads={getThreads(ev, 'link')} userRole={!student.isHistory ? getUserRole(ev.evaluatorId) : null} sectionKey="link" onSend={(s, t) => onSendChat(student.id, ev.evaluatorId, s, t, getUserRole(ev.evaluatorId))} />}
                                             {(!ev.comments.point && !ev.comments.evidence && !ev.comments.explanation && !ev.comments.link) && (
                                                 <span className="text-slate-400 italic text-xs">No written remarks provided.</span>
                                             )}
@@ -619,7 +675,7 @@
             </div>
         );
 
-        const EvaluateForm = ({ students, onSave, currentUser, onViewChange }) => {
+        const EvaluateForm = ({ students, onSave, onDelete, currentUser, onViewChange }) => {
             const [selectedId, setSelectedId] = useState(students[0]?.id);
             const [scores, setScores] = useState({ point: 15, evidence: 15, explanation: 15, link: 15, logic: 5, clarity: 5, fairness: 5 });
             const [comments, setComments] = useState({ point: '', evidence: '', explanation: '', link: '' });
@@ -667,6 +723,10 @@
                 }
 
                 const evaluatorId = currentUser.uid;
+                
+                // Check if deleting (handled by button below, but just in case)
+                // This function is for save/update.
+                
                 const evaluatorName = myProfile.name; // Use the name from their saved profile
 
                 onSave(selectedId, {
@@ -680,6 +740,12 @@
 
             const handleScoreChange = (key, val) => setScores(prev => ({ ...prev, [key]: val }));
             const handleCommentChange = (key, val) => setComments(prev => ({ ...prev, [key]: val }));
+
+            // Check for existing evaluation to show Delete button
+            const existingEvaluation = useMemo(() => {
+                if (!studentToEvaluate || !currentUser) return null;
+                return studentToEvaluate.evaluations?.find(e => String(e.evaluatorId) === String(currentUser.uid));
+            }, [studentToEvaluate, currentUser]);
 
             return (
                 <div className="max-w-7xl mx-auto p-2 animate-fade-in pb-20">
@@ -731,6 +797,15 @@
                                          <span className="text-sm text-slate-400 font-medium">/100</span>
                                      </div>
                                  </div>
+                                 {existingEvaluation && (
+                                     <button 
+                                        type="button"
+                                        onClick={() => onDelete(studentToEvaluate.id, currentUser.uid)}
+                                        className="px-4 py-3 text-red-600 font-bold hover:bg-red-50 rounded-xl transition-all flex items-center gap-2 text-sm"
+                                     >
+                                         <Icons.Trash size={16} /> Delete My Review
+                                     </button>
+                                 )}
                                  <button type="submit" className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transform hover:-translate-y-0.5 transition-all flex items-center gap-2">
                                      <Icons.CheckCircle size={18} />
                                      Submit Evaluation
@@ -758,9 +833,10 @@
             </div>
         );
 
-        const AddArgumentForm = ({ onSave, students, user, isAdmin, initialData }) => {
+        const AddArgumentForm = ({ onSave, onRevise, students, user, isAdmin, initialData }) => {
             // (B) PROFESSIONAL POLISH: LOADING STATE
             const [isSubmitting, setIsSubmitting] = useState(false);
+            const [showFeedback, setShowFeedback] = useState(false);
 
             // 1. Determine who is the "target" student being edited
             const myProfile = React.useMemo(() => {
@@ -799,6 +875,9 @@
                 }
             }, [myProfile, user, isAdmin]);
 
+            // Get previous version for reference
+            const previousVersion = myProfile?.versions?.[myProfile.versions.length - 1];
+
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 setIsSubmitting(true); // Disable button
@@ -828,10 +907,16 @@
                             Your argument has already been evaluated by your peers. 
                             To preserve the integrity of their reviews, you cannot edit this argument anymore.
                         </p>
-                        <div className="bg-slate-100 p-4 rounded-lg max-w-sm text-sm text-slate-600">
-                            <strong>Note:</strong> If you must change this, contact an Admin. 
-                            (Warning: This will delete all your current scores).
+                        <div className="flex flex-col gap-3 w-full max-w-xs">
+                            <button 
+                                onClick={() => onRevise(myProfile.id)}
+                                className="w-full py-3 bg-white border-2 border-slate-900 text-slate-900 font-bold rounded-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Icons.RefreshCw size={18} />
+                                Create Revised Version
+                            </button>
                         </div>
+                        <p className="text-xs text-slate-400 mt-4">This will archive current evaluations and reset your score.</p>
                     </div>
                 );
             }
@@ -852,6 +937,38 @@
                             )}
                         </div>
                     </div>
+
+                    {/* PREVIOUS FEEDBACK REFERENCE */}
+                    {previousVersion && (
+                        <div className="mb-8 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                            <button 
+                                type="button"
+                                onClick={() => setShowFeedback(!showFeedback)}
+                                className="flex items-center justify-between w-full text-indigo-800 font-bold text-sm"
+                            >
+                                <span className="flex items-center gap-2"><Icons.Brain size={16} /> Reference: Feedback from V{previousVersion.version}</span>
+                                <Icons.ChevronRight size={16} className={`transition-transform duration-200 ${showFeedback ? 'rotate-90' : ''}`} />
+                            </button>
+                            
+                            {showFeedback && (
+                                <div className="mt-4 space-y-3 animate-fade-in max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                                    {previousVersion.evaluations.length === 0 && <p className="text-xs text-slate-500 italic">No evaluations in previous version.</p>}
+                                    {previousVersion.evaluations.map((ev, idx) => (
+                                        <div key={idx} className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm text-xs">
+                                            <div className="font-bold text-slate-700 mb-2 border-b border-slate-100 pb-1">{ev.evaluatorName}</div>
+                                            <div className="grid gap-2">
+                                                {ev.comments.point && <div className="text-slate-600"><span className="font-bold text-blue-600 uppercase text-[10px]">Point:</span> {ev.comments.point}</div>}
+                                                {ev.comments.evidence && <div className="text-slate-600"><span className="font-bold text-green-600 uppercase text-[10px]">Evidence:</span> {ev.comments.evidence}</div>}
+                                                {ev.comments.explanation && <div className="text-slate-600"><span className="font-bold text-amber-600 uppercase text-[10px]">Explanation:</span> {ev.comments.explanation}</div>}
+                                                {ev.comments.link && <div className="text-slate-600"><span className="font-bold text-purple-600 uppercase text-[10px]">Link:</span> {ev.comments.link}</div>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid grid-cols-2 gap-4">
                             <InputField label="Student Name" value={formData.name} onChange={e => handleChange('name', e.target.value)} placeholder="Name" />
@@ -1089,7 +1206,20 @@
             const [localData, setLocalData] = useState(() => {
                 const saved = localStorage.getItem('criticalThinkingDB');
                 const initial = [
-                    { id: 1, name: "Ammar Ajmal", topic: "Guardians of the Status Quo", peel: { point: "The religious establishment in Pakistan systematically unites against any reformer who attempts to present Islam as a 'Deen' (system) rather than a 'Mazhab' (ritual).", evidence: "Historical fatwas against Maududi, marginalization of Dr. Israr Ahmed, and recent coordinated attacks on Sahil Adeem.", explanation: "This is a defense mechanism (Wahan). By reducing Islam to private worship, the clergy protects their monopoly and relationship with the political elite, similar to the Medieval Church.", link: "Therefore, the primary obstacle to a just system is the religious establishment's active suppression of political Islam." }, evaluations: [{ evaluatorId: 2, evaluatorName: "Ramish Dars", peel: { point: 22, evidence: 20, explanation: 22, link: 20 }, comments: { point: "Strong opening.", evidence: "Good historical context.", explanation: "Logical.", link: "Clear conclusion." }, secondary: { logic: 9, clarity: 9, fairness: 8 } }, { evaluatorId: 4, evaluatorName: "Shoaib Najeeb", peel: { point: 24, evidence: 23, explanation: 23, link: 22 }, comments: { point: "Excellent.", evidence: "Very relevant.", explanation: "Deep insight.", link: "Well connected." }, secondary: { logic: 10, clarity: 9, fairness: 9 } }] },
+                    { 
+                        id: 1, 
+                        name: "Ammar Ajmal", 
+                        topic: "Guardians of the Status Quo", 
+                        peel: { point: "The religious establishment in Pakistan systematically unites against any reformer who attempts to present Islam as a 'Deen' (system) rather than a 'Mazhab' (ritual).", evidence: "Historical fatwas against Maududi, marginalization of Dr. Israr Ahmed, and recent coordinated attacks on Sahil Adeem.", explanation: "This is a defense mechanism (Wahan). By reducing Islam to private worship, the clergy protects their monopoly and relationship with the political elite, similar to the Medieval Church.", link: "Therefore, the primary obstacle to a just system is the religious establishment's active suppression of political Islam." }, 
+                        evaluations: [{ evaluatorId: 2, evaluatorName: "Ramish Dars", peel: { point: 22, evidence: 20, explanation: 22, link: 20 }, comments: { point: "Strong opening.", evidence: "Good historical context.", explanation: "Logical.", link: "Clear conclusion." }, secondary: { logic: 9, clarity: 9, fairness: 8 } }, { evaluatorId: 4, evaluatorName: "Shoaib Najeeb", peel: { point: 24, evidence: 23, explanation: 23, link: 22 }, comments: { point: "Excellent.", evidence: "Very relevant.", explanation: "Deep insight.", link: "Well connected." }, secondary: { logic: 10, clarity: 9, fairness: 9 } }],
+                        versions: [
+                            {
+                                version: 1,
+                                peel: { point: "Old Point (V1)", evidence: "Old Evidence", explanation: "Old Explanation", link: "Old Link" },
+                                evaluations: [{ evaluatorId: 99, evaluatorName: "Old Reviewer", peel: { point: 10, evidence: 10, explanation: 10, link: 10 }, comments: { point: "This was the V1 feedback." }, secondary: { logic: 5, clarity: 5, fairness: 5 } }]
+                            }
+                        ]
+                    },
                     { id: 2, name: "Ramish Dars", topic: "Modesty in Nikkah vs. Israaf", peel: { point: "Celebrating Nikkah modestly aligns with Islamic values and reduces financial stress, allowing focus on the spiritual essence of marriage.", evidence: "Quran (7:31, 17:26) forbids Israaf. Gallup 2025 survey shows 25% of families take loans (avg 1.4M PKR) for weddings.", explanation: "Extravagance is equated with satanic actions (waste). Social pressure forces debt, whereas modesty upholds justice and prevents financial burden.", link: "Therefore, modest Nikkah builds stronger, debt-free marriages and a balanced society." }, evaluations: [{ evaluatorId: 1, evaluatorName: "Ammar Ajmal", peel: { point: 23, evidence: 25, explanation: 22, link: 22 }, comments: {}, secondary: { logic: 9, clarity: 9, fairness: 9 } }, { evaluatorId: 3, evaluatorName: "Vaneeza Tariq", peel: { point: 20, evidence: 22, explanation: 22, link: 25 }, comments: {}, secondary: { logic: 8, clarity: 9, fairness: 10 } }] },
                 ];
                 return saved ? JSON.parse(saved) : initial;
@@ -1099,6 +1229,7 @@
             const [selectedId, setSelectedId] = useState(null);
             const [view, setView] = useState('dashboard'); // dashboard, add, evaluate, admin
             const [editingStudent, setEditingStudent] = useState(null);
+            const [historyIndex, setHistoryIndex] = useState(null); // null = current, 0 = V1, 1 = V2...
 
             // Handle Offline Mode Skip
             useEffect(() => {
@@ -1131,9 +1262,31 @@
                 }
             }, [status, localData]);
 
+            // Reset history view when switching students
+            useEffect(() => {
+                setHistoryIndex(null);
+            }, [selectedId]);
+
             // Unified Data Access
             const data = (status === 'ready') ? firestoreData : localData;
             const activeStudent = data.find(s => String(s.id) === String(selectedId)) || data[0];
+            
+            // Compute Displayed Student (Current vs History)
+            const displayedStudent = useMemo(() => {
+                if (!activeStudent) return null;
+                if (historyIndex === null) return activeStudent;
+                
+                const pastVersion = activeStudent.versions?.[historyIndex];
+                if (!pastVersion) return activeStudent;
+
+                return {
+                    ...activeStudent,
+                    peel: pastVersion.peel,
+                    evaluations: pastVersion.evaluations,
+                    isHistory: true
+                };
+            }, [activeStudent, historyIndex]);
+
             const isAdmin = (status === 'offline') || (user && user.email && user.email.includes('admin')); // Simple Admin rule
 
             // Actions
@@ -1251,6 +1404,94 @@
                 }
             };
 
+            const reviseStudent = async (id) => {
+                if (!confirm("Create a new version?\n\nThis will archive your current evaluations and allow you to edit your argument. Your score will be reset until you receive new feedback.")) return;
+                
+                try {
+                    const student = data.find(s => String(s.id) === String(id));
+                    if (!student) return;
+
+                    const archive = {
+                        timestamp: new Date().toISOString(),
+                        peel: student.peel,
+                        evaluations: student.evaluations,
+                        version: (student.versions?.length || 0) + 1
+                    };
+
+                    const updates = {
+                        evaluations: [],
+                        versions: [...(student.versions || []), archive]
+                    };
+
+                    if (status === 'ready') {
+                        await db.collection(DATA_COLLECTION).doc(String(id)).update(updates);
+                    } else {
+                        const newData = localData.map(s => String(s.id) === String(id) ? { ...s, ...updates } : s);
+                        setLocalData(newData);
+                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                    }
+                    
+                    setEditingStudent({ ...student, ...updates }); // Pre-load form with current text but no evals
+                    setView('add');
+                } catch (e) {
+                    alert("Error creating revision: " + e.message);
+                }
+            };
+
+            const saveThreadMessage = async (studentId, evaluatorId, section, text, role) => {
+                try {
+                    const student = data.find(s => String(s.id) === String(studentId));
+                    if (!student) return;
+
+                    const newEvaluations = student.evaluations.map(ev => {
+                        if (String(ev.evaluatorId) === String(evaluatorId)) {
+                            const currentThreads = ev.threads || {};
+                            const sectionThread = currentThreads[section] || [];
+                            
+                            // If legacy reply exists, migrate it to thread first
+                            if (ev.replies?.[section] && sectionThread.length === 0) {
+                                sectionThread.push({ role: 'author', text: ev.replies[section], timestamp: new Date().toISOString() });
+                            }
+
+                            const newThread = [...sectionThread, { role, text, timestamp: new Date().toISOString() }];
+                            return { ...ev, threads: { ...currentThreads, [section]: newThread } };
+                        }
+                        return ev;
+                    });
+
+                    if (status === 'ready') {
+                        await db.collection(DATA_COLLECTION).doc(String(studentId)).update({ evaluations: newEvaluations });
+                    } else {
+                        const newData = localData.map(s => String(s.id) === String(studentId) ? { ...s, evaluations: newEvaluations } : s);
+                        setLocalData(newData);
+                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                    }
+                } catch (e) {
+                    alert("Error sending message: " + e.message);
+                }
+            };
+
+            const deleteEvaluation = async (studentId, evaluatorId) => {
+                if (!confirm("Are you sure you want to delete your evaluation?")) return;
+                try {
+                    const student = data.find(s => String(s.id) === String(studentId));
+                    if (!student) return;
+
+                    const newEvaluations = student.evaluations.filter(e => String(e.evaluatorId) !== String(evaluatorId));
+
+                    if (status === 'ready') {
+                        await db.collection(DATA_COLLECTION).doc(String(studentId)).update({ evaluations: newEvaluations });
+                    } else {
+                        const newData = localData.map(s => String(s.id) === String(studentId) ? { ...s, evaluations: newEvaluations } : s);
+                        setLocalData(newData);
+                        localStorage.setItem('criticalThinkingDB', JSON.stringify(newData));
+                    }
+                    // alert("Evaluation deleted."); // Optional feedback
+                } catch (e) {
+                    alert("Error deleting evaluation: " + e.message);
+                }
+            };
+
             const deleteStudent = async (id) => {
                 if (!confirm("Are you sure? This will delete the user, their argument, and ALL evaluations they have given to others.")) return;
                 try {
@@ -1350,7 +1591,7 @@
             if (status === 'auth') return <AuthScreen />;
 
             // Main UI
-            const formattedId = activeStudent ? String(activeStudent.id).slice(-3) : '000';
+            const formattedId = displayedStudent ? String(displayedStudent.id).slice(-3) : '000';
 
             return (
                 <div className="flex h-screen md:flex-row flex-col bg-slate-50 overflow-hidden font-sans">
@@ -1376,7 +1617,7 @@
 
                         <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-blue-100/40 rounded-full blur-3xl -z-10 -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                         <div className="max-w-7xl mx-auto p-4 md:p-8 min-h-full">
-                            {view === 'dashboard' && activeStudent && (
+                            {view === 'dashboard' && displayedStudent && (
                                 <div className="animate-fade-in pt-6 md:pt-0">
                                     <header className="mb-8 pl-1">
                                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
@@ -1385,9 +1626,9 @@
                                                     <Icons.Users size={16} />
                                                     <span>Overview</span>
                                                     <Icons.ChevronRight size={14} />
-                                                    <span className="text-slate-600 font-bold">{activeStudent.name || 'Unknown'}</span>
+                                                    <span className="text-slate-600 font-bold">{displayedStudent.name || 'Unknown'}</span>
                                                 </div>
-                                                <h1 className="text-3xl font-bold text-slate-900 leading-tight">{activeStudent.topic || 'Untitled'}</h1>
+                                                <h1 className="text-3xl font-bold text-slate-900 leading-tight">{displayedStudent.topic || 'Untitled'}</h1>
                                             </div>
                                             <div className="flex-shrink-0">
                                                 <span className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm font-medium text-slate-600 text-sm">
@@ -1396,16 +1637,38 @@
                                                 </span>
                                             </div>
                                         </div>
+                                        
+                                        {/* Version Selector */}
+                                        {activeStudent.versions && activeStudent.versions.length > 0 && (
+                                            <div className="flex items-center gap-2 mt-4 border-t border-slate-100 pt-4 animate-fade-in">
+                                                <span className="text-xs font-bold text-slate-400 uppercase mr-2">History:</span>
+                                                {activeStudent.versions.map((v, idx) => (
+                                                    <button
+                                                        key={idx}
+                                                        onClick={() => setHistoryIndex(idx)}
+                                                        className={`px-3 py-1 text-xs font-bold rounded-full border transition-all ${historyIndex === idx ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
+                                                    >
+                                                        V{v.version}
+                                                    </button>
+                                                ))}
+                                                <button
+                                                    onClick={() => setHistoryIndex(null)}
+                                                    className={`px-3 py-1 text-xs font-bold rounded-full border transition-all ${historyIndex === null ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
+                                                >
+                                                    Current (V{(activeStudent.versions.length || 0) + 1})
+                                                </button>
+                                            </div>
+                                        )}
                                     </header>
                                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                                         <div className="lg:col-span-7 grid grid-cols-1 gap-4 content-start">
-                                            <PeelCard variant="Point" content={activeStudent.peel.point} />
-                                            <PeelCard variant="Evidence" content={activeStudent.peel.evidence} />
-                                            <PeelCard variant="Explanation" content={activeStudent.peel.explanation} />
-                                            <PeelCard variant="Link" content={activeStudent.peel.link} />
+                                            <PeelCard variant="Point" content={displayedStudent.peel.point} />
+                                            <PeelCard variant="Evidence" content={displayedStudent.peel.evidence} />
+                                            <PeelCard variant="Explanation" content={displayedStudent.peel.explanation} />
+                                            <PeelCard variant="Link" content={displayedStudent.peel.link} />
                                         </div>
                                         <div className="lg:col-span-5">
-                                            <EvaluationDashboard student={activeStudent} />
+                                            <EvaluationDashboard student={displayedStudent} currentUser={user} onSendChat={saveThreadMessage} />
                                         </div>
                                     </div>
                                 </div>
@@ -1413,13 +1676,14 @@
                             {view === 'add' && (
                                 <AddArgumentForm 
                                     onSave={saveStudent} 
+                                    onRevise={reviseStudent}
                                     students={data}      // Pass all students to find "myProfile"
                                     user={user}          // Pass current user to match ID
                                     isAdmin={isAdmin}    // Pass admin status for override logic
                                     initialData={editingStudent} // Pass data if Admin clicked "Edit"
                                 />
                             )}
-                            {view === 'evaluate' && <EvaluateForm students={data} onSave={saveEvaluation} currentUser={user} onViewChange={setView} />}
+                            {view === 'evaluate' && <EvaluateForm students={data} onSave={saveEvaluation} onDelete={deleteEvaluation} currentUser={user} onViewChange={setView} />}
                             {view === 'admin' && isAdmin && (
                                 <AdminPanel
                                     students={data}

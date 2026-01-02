@@ -7,7 +7,7 @@
 ## 📖 Project Overview
 
 The **Critical Thinking Evaluation Dashboard** is a web-based application designed to digitize the academic peer-review workflow. It replaces manual spreadsheet tracking with a real-time, cloud-synced dashboard that enforces structured argumentation and fair evaluation.
-
+The platform supports an iterative feedback loop, allowing students to refine their arguments based on peer critiques and resubmit revised versions for further assessment.
 The platform guides students to draft arguments using the **PEEL (Point, Evidence, Explanation, Link)** framework and provides a robust, quantitative grading system for peer assessment.
 
 ## 🛠 Tech Stack
@@ -26,11 +26,12 @@ To ensure academic rigor, the application enforces the **PEEL structure** for al
 A core requirement was to solve the issue of unfair grading or "freeloading." The system implements strict logic gates:
 * **"Give-to-Get" Policy:** Access to the evaluation tools is locked until the user contributes their own argument.
 * **Anti-Self-Vote:** Users are programmatically blocked from evaluating their own profile.
-* **Locking Mechanism:** Once a student receives an evaluation, their draft is **LOCKED** immediately. This prevents retrospective editing to "fix" answers based on feedback.
+* **Submission Versioning:** Once a draft is submitted and evaluated, it is locked to preserve the integrity of the review. However, students can create a **new, revised version** of their argument, which incorporates feedback from peers. This new version then enters the review cycle again.
 
-### 3. Quantitative Scoring System
+### 3. Interactive Scoring & Feedback
 * **Primary Metrics (0-100):** Visual sliders for Point, Evidence, Explanation, and Link.
 * **Secondary Metrics (0-10):** Additional ratings for Logic, Clarity, and Fairness.
+* **Targeted Replies:** Students can reply directly to specific feedback points (e.g., comments on 'Evidence' or 'Clarity'). This creates a threaded discussion, allowing them to acknowledge feedback and explain their revisions.
 * **Dynamic Updates:** If an evaluator updates their score, the system intelligently replaces the old record to maintain data accuracy.
 
 ### 4. Admin Administration Panel
@@ -42,7 +43,7 @@ A core requirement was to solve the issue of unfair grading or "freeloading." Th
 
 | Challenge | Solution |
 | :--- | :--- |
-| **Workflow Integrity** | Implemented complex state management to physically disable the "Rate" tab until specific database conditions (submission existence) were met. |
+| **Workflow Integrity** | Implemented complex state management for version control. The UI dynamically adapts, locking evaluated drafts while enabling a "Revise" button. This ensures users can only edit the latest version of their argument. |
 | **Data Persistence** | Integrated Firebase listeners to ensure that if Student A grades Student B, Student B sees the result instantly without refreshing. |
 | **Portability** | Designed the entire application to run from a single `index.html` file without a build step (Create-React-App/Vite), allowing for easy distribution to non-technical users. |
 
